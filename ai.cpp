@@ -2,8 +2,11 @@
 #include <thread>
 #include <queue>
 #include <array>
+#include <chrono>
 #include "AI.h"
 #include "constants.h"
+
+#define PI 3.1415
 // 为假则play()期间确保游戏状态不更新，为真则只保证游戏状态在调用相关方法时不更新
 extern const bool asynchronous = false;
 
@@ -18,18 +21,8 @@ extern const std::array<THUAI6::StudentType, 4> studentType = {
 extern const THUAI6::TrickerType trickerType = THUAI6::TrickerType::Assassin;
 //记录函数
 
-void InitMap(IAPI& api);
-bool issurround(IStudentAPI& api, int x, int y);
-//
-static THUAI6::PlaceType map[50][50];
 
-static int steps;
-static int hasinitmap;
-static int hasBeenTo;
-static bool hasInitMap = false;
-static bool IHaveArrived = false;
-static int lastX = 0, lastY = 0;
-static int lastFrameCount = 0;
+
 //定义非常多的状态（有限状态机）
 enum class status
 {
@@ -39,7 +32,9 @@ enum class status
     idle,
     reset,
     index,
+    retreat,
     move
+
 };
 
 static status BotStatus = status::initial;
@@ -66,20 +61,40 @@ struct Node {
         return dist > other.dist;
     }
 };
+
+// 可以在AI.cpp内部声明变量与函数
+
+//函数
+double Distance(Point a, Point b);
+void printPathType(IStudentAPI& api, std::queue<Point> q);
 void printQueue(std::queue<Point> q);
 std::queue<Point> bfs(Point start, Point end);
-void Goto(IStudentAPI& api, int destX, int destY);
-bool isWalld(IStudentAPI& api);
-// 可以在AI.cpp内部声明变量与函数
+void Goto(IStudentAPI& api, int destX, int destY, double randAngle = 0); //randAngle = 1，则取波动范围为-0.5pi-0.5pi
+void InitMap(IAPI& api);
+bool isSurround(IStudentAPI& api, int x, int y);
+bool stuckCheck(IStudentAPI&, int n);//注意，n必须在2-10之间
+//变量
+
+static THUAI6::PlaceType map[50][50];
+static int steps;
+static int hasinitmap;
+static int hasBeenTo;
+static bool hasInitMap = false;
+static bool IHaveArrived = false;
+static int lastX = 0, lastY = 0;
+static int lastFrameCount = 0;
 std::queue<Point> path;
-int count = 1;
+double derectionBeforeRetreat;
+
+//stuckCheck()相关变量
+int32_t memoryX[10];
+int32_t memoryY[10];
 
 void AI::play(IStudentAPI& api)
 {
     // 公共操作
     if (this->playerID == 0)
     {
-
         // 玩家0执行操作
     }
     else if (this->playerID == 1)
@@ -100,9 +115,10 @@ void AI::play(IStudentAPI& api)
             }
             int x = (api.GetSelfInfo()->x) / 1000;
             int y = (api.GetSelfInfo()->y) / 1000;
-            path = bfs(Point(1, 3), Point(x, y));
+            path = bfs(Point(12, 3), Point(x, y));
             IHaveArrived = false;
             BotStatus = status::move;
+            printQueue(path);
             break;
         }
         case status::move:
@@ -111,17 +127,41 @@ void AI::play(IStudentAPI& api)
             if (!path.empty())
             {
                 std::cout << path.front().x << path.front().y << std::endl;
-                Goto(api, path.front().x, path.front().y);
-                if (issurround(api, path.front().x, path.front().y))
+                Goto(api, path.front().x + 1, path.front().y + 1);
+                if (isSurround(api, path.front().x, path.front().y))
                     path.pop();
-                if (isWalld(api))
-                {
-                    api.MoveRight(3000);
-                    api.Wait();
-                }
             }
+            if (stuckCheck(api, 3))
+            {
+                BotStatus = status::retreat;
+                derectionBeforeRetreat = self->facingDirection;
+                break;
+            }
+            break;
             //Goto(api, );*/
             printQueue(path);
+            printPathType(api, path);
+        }
+        case status::retreat:
+        {
+            std::cout << "retreat" << std::endl;
+            int x = self->x / 1000;
+            int y = self->y / 1000;
+            //api.MoveLeft(200);
+            api.Wait();
+            api.Move(200, derectionBeforeRetreat + PI);
+            std::cout << "ran away!" << std::endl;
+            if (Distance(Point(path.front().x, path.front().y), Point(x, y)) < 2)
+                path.pop();
+            //BotStatus = status::move;
+           // break;     
+            //for(int i=y;)
+            if (!stuckCheck(api, 3))
+            {
+                BotStatus = status::move;
+                break;
+            }
+
         }
         api.Wait();
         }
@@ -142,6 +182,7 @@ void AI::play(ITrickerAPI& api)
 {
     auto self = api.GetSelfInfo();
     api.PrintSelfInfo();
+    api.MoveLeft(1000);
 }
 
 //我写的函数：
@@ -239,27 +280,19 @@ void printQueue(std::queue<Point> q)
     }
     std::cout << std::endl;
 }
-bool issurround(IStudentAPI& api, int x, int y)
+bool isSurround(IStudentAPI& api, int x, int y)
 {
     double distance;
     auto self = api.GetSelfInfo();
-    int sx = (self->x) / 1000;
-    int sy = (self->y) / 1000;
+    auto sx = (self->x) / 1000;
+    auto sy = (self->y) / 1000;
     distance = sqrt((sx - x) * (sx - x) + (sy - y) * (sy - y));
-    if (distance <= 1)
+    if (distance <= 0.5)
         return true;
     return false;
 }
-bool isWalld(IStudentAPI& api)
-{
-    auto self = api.GetSelfInfo();
-    int sx = (self->x) / 1000;
-    int sy = (self->y) / 1000;
-    if (self->speed == 0)
-        return true;
-    return false;
-}
-void Goto(IStudentAPI& api, int destX, int destY)
+
+void Goto(IStudentAPI& api, int destX, int destY ,double randAngle = 0)
 {
     std::printf("goto %d,%d\n", destX, destY);
     auto self = api.GetSelfInfo();
@@ -272,5 +305,50 @@ void Goto(IStudentAPI& api, int destX, int destY)
     double ang = 0;
     //直接走
     ang = atan2(delta_y, delta_x);
-    api.Move(300, ang);
+    api.Move(300, ang + (std::rand()% 10 - 5)*PI/10*randAngle);
+}
+
+
+//判断实际速度是否为0（防止卡墙上）
+bool stuckCheck(IStudentAPI& api, int n)
+{
+    if (n >= 2 && n <= 10) 
+    {
+        auto self = api.GetSelfInfo();
+        auto sx = self->x;
+        auto sy = self->y;
+        for (int i = 0; i <= n - 2; i++)
+        {
+            memoryX[i] = memoryX[i + 1];
+            memoryY[i] = memoryY[i + 1];
+        }
+        memoryX[n-1] = sx;
+        memoryY[n-1] = sy;
+        if (memoryX[0] == sx && memoryY[0] == sy)
+        {
+            std::cout << "stuck!" << std::endl;
+            return true;
+        }
+        else 
+        {
+            return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+}
+double Distance(Point a, Point b)
+{
+    return(sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)));
+}
+void printPathType(IStudentAPI& api, std::queue<Point> q)
+{
+    while (!q.empty())
+    {
+        std::cout << "(" << q.front().x << "," << q.front().y << ")->" << (int)api.GetPlaceType(q.front().x, q.front().y) << " ";
+        q.pop();
+    }
+    std::cout << std::endl;
 }

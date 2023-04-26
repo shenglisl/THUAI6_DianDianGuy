@@ -61,18 +61,26 @@ struct Node {
         return dist > other.dist;
     }
 };
+//状态机函数
+void playerBot(IStudentAPI&);
 
 // 可以在AI.cpp内部声明变量与函数
 
 //函数
-double Distance(Point a, Point b);
-void printPathType(IStudentAPI& api, std::queue<Point> q);
+
+//循迹相关
+double Distance(Point, Point);
+std::queue<Point> bfs(Point, Point);
+void Goto(IStudentAPI&, double, double, double); //randAngle = 1，则取波动范围为-0.5pi-0.5pi
+void InitMap(IAPI&);
+//状态检查类
+bool isSurround(IStudentAPI&, int , int);
+bool stuckCheck(IStudentAPI&, int);//注意，n必须在2-10之间
+//debug相关
+void printPathType(IStudentAPI&, std::queue<Point>);
 void printQueue(std::queue<Point> q);
-std::queue<Point> bfs(Point start, Point end);
-void Goto(IStudentAPI& api, int destX, int destY, double randAngle = 0); //randAngle = 1，则取波动范围为-0.5pi-0.5pi
-void InitMap(IAPI& api);
-bool isSurround(IStudentAPI& api, int x, int y);
-bool stuckCheck(IStudentAPI&, int n);//注意，n必须在2-10之间
+void printPosition(IStudentAPI&);
+
 //变量
 
 static THUAI6::PlaceType map[50][50];
@@ -100,71 +108,7 @@ void AI::play(IStudentAPI& api)
     else if (this->playerID == 1)
     {
         // 玩家1执行操作
-        std::ios::sync_with_stdio(false);
-        auto self = api.GetSelfInfo();
-
-        switch (BotStatus)
-        {
-            //有限状态机的core
-        case status::initial:
-        {
-            if (!hasInitMap)
-            {
-                InitMap(api);
-                hasInitMap = true;
-            }
-            int x = (api.GetSelfInfo()->x) / 1000;
-            int y = (api.GetSelfInfo()->y) / 1000;
-            path = bfs(Point(12, 3), Point(x, y));
-            IHaveArrived = false;
-            BotStatus = status::move;
-            printQueue(path);
-            break;
-        }
-        case status::move:
-        {
-            std::cout << "move!" << std::endl;
-            if (!path.empty())
-            {
-                std::cout << path.front().x << path.front().y << std::endl;
-                Goto(api, path.front().x + 1, path.front().y + 1);
-                if (isSurround(api, path.front().x, path.front().y))
-                    path.pop();
-            }
-            if (stuckCheck(api, 3))
-            {
-                BotStatus = status::retreat;
-                derectionBeforeRetreat = self->facingDirection;
-                break;
-            }
-            break;
-            //Goto(api, );*/
-            printQueue(path);
-            printPathType(api, path);
-        }
-        case status::retreat:
-        {
-            std::cout << "retreat" << std::endl;
-            int x = self->x / 1000;
-            int y = self->y / 1000;
-            //api.MoveLeft(200);
-            api.Wait();
-            api.Move(200, derectionBeforeRetreat + PI);
-            std::cout << "ran away!" << std::endl;
-            if (Distance(Point(path.front().x, path.front().y), Point(x, y)) < 2)
-                path.pop();
-            //BotStatus = status::move;
-           // break;     
-            //for(int i=y;)
-            if (!stuckCheck(api, 3))
-            {
-                BotStatus = status::move;
-                break;
-            }
-
-        }
-        api.Wait();
-        }
+        playerBot(api);
     }
     else if (this->playerID == 2)
     {
@@ -287,12 +231,12 @@ bool isSurround(IStudentAPI& api, int x, int y)
     auto sx = (self->x) / 1000;
     auto sy = (self->y) / 1000;
     distance = sqrt((sx - x) * (sx - x) + (sy - y) * (sy - y));
-    if (distance <= 0.5)
+    if (distance <= 1)
         return true;
     return false;
 }
 
-void Goto(IStudentAPI& api, int destX, int destY ,double randAngle = 0)
+void Goto(IStudentAPI& api, double destX, double destY ,double randAngle = 0)
 {
     std::printf("goto %d,%d\n", destX, destY);
     auto self = api.GetSelfInfo();
@@ -351,4 +295,75 @@ void printPathType(IStudentAPI& api, std::queue<Point> q)
         q.pop();
     }
     std::cout << std::endl;
+}
+void printPosition(IStudentAPI& api)
+{
+    auto self = api.GetSelfInfo();
+    auto sx = self->x;
+    auto sy = self->y;
+    std::cout << "position: (" << sx << "," << sy << ")" << std::endl;
+}
+
+void playerBot(IStudentAPI& api)
+{
+    std::ios::sync_with_stdio(false);
+    auto self = api.GetSelfInfo();
+
+    switch (BotStatus)
+    {
+        //有限状态机的core
+        case status::initial:
+        {
+            if (!hasInitMap)
+            {
+                InitMap(api);
+                hasInitMap = true;
+            }
+            int x = (api.GetSelfInfo()->x) / 1000;
+            int y = (api.GetSelfInfo()->y) / 1000;
+            path = bfs(Point(12, 3), Point(x, y));
+            IHaveArrived = false;
+			BotStatus = status::move;
+            printQueue(path);
+            break;
+        }
+        case status::move:
+        {
+            std::cout << "move!" << std::endl;
+            if (!path.empty())
+            {
+                //std::cout << path.front().x << path.front().y << std::endl;
+                Goto(api, path.front().x + 0.5, path.front().y + 0.5);
+                if (isSurround(api, path.front().x, path.front().y))
+                    path.pop();
+            }
+            if (stuckCheck(api, 3))
+            {
+                BotStatus = status::retreat;
+                derectionBeforeRetreat = self->facingDirection;
+                break;
+            }
+            printPosition(api);
+            printQueue(path);
+            printPathType(api, path);
+            break;
+        }
+        case status::retreat:
+        {
+            std::cout << "retreat" << std::endl;
+            if (!path.empty())
+            {
+                std::cout << path.front().x << path.front().y << std::endl;
+                Goto(api, path.front().x, path.front().y, 1);
+                if (isSurround(api, path.front().x, path.front().y))
+                    path.pop();
+            }
+		    if (!stuckCheck(api, 3))
+		    {
+                BotStatus = status::move;
+            }
+            break;
+	    }
+	api.Wait();
+    }
 }

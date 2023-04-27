@@ -111,7 +111,7 @@ double derectionBeforeRetreat;
 int32_t memoryX[10];
 int32_t memoryY[10];
 //目标坐标
-Point targetP = Point(12,3);
+Point targetP = Point(12, 3);
 
 //特殊点坐标
 std::vector<Point> hw;
@@ -120,8 +120,8 @@ std::vector<Point> window;
 std::vector<Point> gate;
 std::vector<Point> chest;
 //决策相关分组变量
-int hwGroup1Index[5] = {0,1,3,5,7};
-int hwGroup2Index[5] = {2,4,6,8,9};
+int hwGroup1Index[5] = { 0,1,3,5,7 };
+int hwGroup2Index[5] = { 2,4,6,8,9 };
 std::vector<Point> hwGroup1;
 std::vector<Point> hwGroup2;
 
@@ -163,17 +163,17 @@ void AI::play(ITrickerAPI& api)
 
 void arrayClear()
 {
-	int i, j;
+    int i, j;
     for (i = 0; i < 50; i++)
     {
         for (j = 0; j < 50; j++)
         {
-			vis[i][j] = 0;
-			dis[i][j] = 0;
-			pre[i][j][0] = 0;
-			pre[i][j][1] = 0;
-		}
-	}
+            vis[i][j] = 0;
+            dis[i][j] = 0;
+            pre[i][j][0] = 0;
+            pre[i][j][1] = 0;
+        }
+    }
 }
 
 void InitMapForMove(IAPI& api)
@@ -321,9 +321,9 @@ void printPointVector(std::vector<Point> v)
 {
     for (int i = 0; i < v.size(); i++)
     {
-		std::cout << "(" << v[i].x << "," << v[i].y << ")->";
-	}
-	std::cout << std::endl;
+        std::cout << "(" << v[i].x << "," << v[i].y << ")->";
+    }
+    std::cout << std::endl;
 }
 
 bool isSurround(IStudentAPI& api, int x, int y)
@@ -341,11 +341,11 @@ bool isSurround(IStudentAPI& api, int x, int y)
 bool isTrigger(IStudentAPI& api, Point p)
 {
     auto self = api.GetSelfInfo();
-	auto sx = (self->x) / 1000;
-	auto sy = (self->y) / 1000; 
-	if (abs(sx-p.x-0.5)<=1.5 && abs(sy - p.y - 0.5) <= 1.5)
-		return true;
-	return false;
+    auto sx = (self->x) / 1000;
+    auto sy = (self->y) / 1000;
+    if (abs(sx - p.x - 0.5) <= 1.5 && abs(sy - p.y - 0.5) <= 1.5)
+        return true;
+    return false;
 }
 
 void Goto(IStudentAPI& api, double destX, double destY, double randAngle = 0)
@@ -427,7 +427,7 @@ void groupJuan(IStudentAPI& api)
     {
         hwGroup = hwGroup2;
     }
-   
+
     for (int i = 0; i < hwGroup.size(); i++)
     {
         temp.emplace_back(api.GetClassroomProgress(hwGroup[i].x, hwGroup[i].y));
@@ -437,7 +437,7 @@ void groupJuan(IStudentAPI& api)
         //std::cout<<"isTrigger:"<< isTrigger(api, hw[i])<<"progress:"<<temp[i]<<std::endl;
         if (isTrigger(api, hwGroup[i]) && temp[i] < 10000000)
         {
-            std::cout << "doing hw:" << i <<"progress:"<<temp[i] << std::endl;
+            std::cout << "doing hw:" << i << "progress:" << temp[i] << std::endl;
             api.StartLearning();
 
             return;
@@ -447,7 +447,7 @@ void groupJuan(IStudentAPI& api)
     {
         if (temp[i] < 10000000)
         {
-            std::cout << "goto hw" << i << temp[i] <<std::endl;
+            std::cout << "goto hw" << i << temp[i] << std::endl;
             targetP.x = hwGroup[i].x;
             targetP.y = hwGroup[i].y;
             BotStatus = status::initial;
@@ -491,7 +491,7 @@ void playerBot(IStudentAPI& api)
     case status::idle:
     {
         std::cout << "idling!" << std::endl;
-        juan(api);
+        groupJuan(api);
         break;
     }
     api.Wait();
@@ -544,7 +544,7 @@ void retreatStatus(IStudentAPI& api)
 void initialStatus(IStudentAPI& api)
 {
     std::cout << "initial" << std::endl;
-    
+
     int x = (api.GetSelfInfo()->x) / 1000;
     int y = (api.GetSelfInfo()->y) / 1000;
     path = bfs(Point(targetP.x, targetP.y), Point(x, y));

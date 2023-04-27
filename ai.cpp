@@ -80,9 +80,11 @@ void Goto(IStudentAPI&, double, double, double); // randAngle = 1，则取波动
 void InitMapForMove(IAPI&);
 void initHwGroup();
 void arrayClear();
+int pathLen(Point, Point);
 // 状态检查类
 bool isSurround(IStudentAPI&, int, int);
 bool stuckCheck(IStudentAPI&, int); // 注意，n必须在2-10之间
+bool progressStuckCheck(int, int);
 bool isTrigger(StudentAPI&, Point);//学生和目标点是否在九宫格内
 // debug相关
 void printPathType(IStudentAPI&, std::queue<Point>);
@@ -93,8 +95,12 @@ void printPointVector(std::vector<Point>);
 
 //决策相关
 void groupJuan(IStudentAPI& api);
+void closestJuan(IStudentAPI& api);
+void graduate(IStudentAPI& api);
 
 // 变量
+
+//循迹相关变量
 static int64_t myPlayerID;
 static THUAI6::PlaceType map[50][50];
 static int steps;
@@ -110,6 +116,11 @@ double derectionBeforeRetreat;
 // stuckCheck()相关变量
 int32_t memoryX[10];
 int32_t memoryY[10];
+std::chrono::system_clock::time_point stuckCheckStartTime;
+
+//progressStuckCheck()相关变量
+int32_t memoryProgress[10];
+
 //目标坐标
 Point targetP = Point(12, 3);
 
@@ -119,11 +130,14 @@ std::vector<Point> door;
 std::vector<Point> window;
 std::vector<Point> gate;
 std::vector<Point> chest;
-//决策相关分组变量
+//决策相关变量
+    //groupJuan()相关变量
 int hwGroup1Index[5] = { 0,1,3,5,7 };
 int hwGroup2Index[5] = { 2,4,6,8,9 };
 std::vector<Point> hwGroup1;
 std::vector<Point> hwGroup2;
+	//graduate()相关变量
+bool isGraduate = false;
 
 
 void AI::play(IStudentAPI& api)
@@ -333,7 +347,7 @@ bool isSurround(IStudentAPI& api, int x, int y)
     auto sx = (self->x) / 1000;
     auto sy = (self->y) / 1000;
     distance = sqrt((sx - x) * (sx - x) + (sy - y) * (sy - y));
-    if (distance <= 1)
+    if (distance <= 0.5)
         return true;
     return false;
 }
@@ -343,7 +357,7 @@ bool isTrigger(IStudentAPI& api, Point p)
     auto self = api.GetSelfInfo();
     auto sx = (self->x) / 1000;
     auto sy = (self->y) / 1000;
-    if (abs(sx - p.x - 0.5) <= 1.5 && abs(sy - p.y - 0.5) <= 1.5)
+    if (abs(sx - p.x) <= 1.5 && abs(sy - p.y) <= 1)
         return true;
     return false;
 }
@@ -394,10 +408,44 @@ bool stuckCheck(IStudentAPI& api, int n)
         return false;
     }
 }
+
+//防止持续做作业等时候卡住
+bool progressStuckCheck(int progress, int n)
+{
+    if (n >= 2 && n <= 10)
+    {
+        for (int i = 0; i <= n - 2; i++)
+        {
+            memoryProgress[i] = memoryProgress[i + 1];
+        }
+        memoryProgress[n - 1] = progress;
+        if (memoryProgress[0] == progress)
+        {
+            std::cout << "progressStuck!" << std::endl;
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    else
+    {
+        return false;
+    }
+}
+
 double Distance(Point a, Point b)
 {
     return (sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)));
 }
+
+int pathLen(Point a, Point b)
+{
+    auto tempPath = bfs(a, b);
+    return tempPath.size();
+}
+
 void printPathType(IStudentAPI& api, std::queue<Point> q)
 {
     while (!q.empty())
@@ -439,6 +487,12 @@ void groupJuan(IStudentAPI& api)
         {
             std::cout << "doing hw:" << i << "progress:" << temp[i] << std::endl;
             api.StartLearning();
+            if (progressStuckCheck(temp[i], 9))
+            {
+                api.Move(300, rand());
+				BotStatus = status::initial;
+				return;
+			}
 
             return;
         }
@@ -453,6 +507,94 @@ void groupJuan(IStudentAPI& api)
             BotStatus = status::initial;
             return;
         }
+    }
+    std::cout << "graduate!!" << std::endl;
+    isGraduate = true;
+}
+
+
+void closestJuan(IStudentAPI& api)
+{
+    double dis = 999999;
+    std::vector <int> temp;
+    auto self = api.GetSelfInfo();
+    auto sx = self->x;
+    auto sy = self->y;
+    auto cellX = sx / 1000;
+    auto cellY = sy / 1000;
+    for (int i = 0; i < hw.size(); i++)
+    {
+        temp.emplace_back(api.GetClassroomProgress(hw[i].x, hw[i].y));
+        std::cout<<"temp"<<i<<":"<<temp[i]<<std::endl;
+    }
+    for (int i = 0; i < hw.size(); i++)
+    {
+        //std::cout<<"isTrigger:"<< isTrigger(api, hw[i])<<"progress:"<<temp[i]<<std::endl;
+        if (isTrigger(api, hw[i]) && temp[i] < 10000000)
+        {
+            std::cout << "doing hw:" << i << "progress:" << temp[i] << std::endl;
+            api.StartLearning();
+            if (progressStuckCheck(temp[i], 9))
+            {
+                api.Move(300, rand());
+                BotStatus = status::initial;
+                return;
+            }
+            return;
+        }
+    }
+    targetP = Point(0, 0);
+    for (int i = 0; i < hw.size(); i++)
+    {
+       int tempDis = pathLen(hw[i], Point(cellX, cellY));
+        if (temp[i] < 10000000 && tempDis < dis)
+        {
+            dis = tempDis;
+			targetP.x = hw[i].x;
+			targetP.y = hw[i].y;
+		}
+    }
+    if (targetP.x == 0 && targetP.y == 0)
+    {
+        std::cout << "graduate!!" << std::endl;
+		isGraduate = true;
+	}
+    else
+    {
+        BotStatus = status::initial;
+        return;
+    }
+}
+
+void graduate(IStudentAPI& api)
+{
+    auto self = api.GetSelfInfo();
+    auto sx = self->x;
+    auto sy = self->y;
+    auto cellX = sx / 1000;
+    auto cellY = sy / 1000;
+    auto selfP = Point(cellX, cellY);
+    if (isTrigger(api, gate[1]) && api.GetGateProgress(gate[1].x, gate[1].y)< 18000)
+    {
+        std::cout << "graduating!" << "progress:" << api.GetGateProgress(gate[1].x, gate[1].y) << std::endl;
+        api.StartOpenGate();
+        if (progressStuckCheck(api.GetGateProgress(gate[1].x, gate[1].y), 9))
+        {
+            api.Move(300, rand());
+            BotStatus = status::initial;
+            return;
+        }
+        return;
+    }
+    else if (isTrigger(api, gate[1]))
+    {
+        api.Graduate();
+    }
+    else
+    {
+        targetP.x = gate[1].x;
+        targetP.y = gate[1].y;
+        BotStatus = status::initial;
     }
 }
 
@@ -491,7 +633,13 @@ void playerBot(IStudentAPI& api)
     case status::idle:
     {
         std::cout << "idling!" << std::endl;
-        groupJuan(api);
+        if (!isGraduate)
+            closestJuan(api);
+        else
+        {
+            std::cout << "graduate!!" << std::endl;
+            graduate(api);
+        }
         break;
     }
     api.Wait();
@@ -502,7 +650,7 @@ void moveStatus(IStudentAPI& api)
 {
     auto self = api.GetSelfInfo();
     std::cout << "move!" << std::endl;
-    if (!path.empty())
+    if (!path.empty() && !isTrigger(api, targetP))
     {
         // std::cout << path.front().x << path.front().y << std::endl;
         Goto(api, path.front().x + 0.5, path.front().y + 0.5);
@@ -516,6 +664,7 @@ void moveStatus(IStudentAPI& api)
     if (stuckCheck(api, 3))
     {
         BotStatus = status::retreat;
+        stuckCheckStartTime = std::chrono::system_clock::now();
         derectionBeforeRetreat = self->facingDirection;
     }
 }
@@ -523,10 +672,19 @@ void moveStatus(IStudentAPI& api)
 void retreatStatus(IStudentAPI& api)
 {
     std::cout << "retreat" << std::endl;
-    if (!path.empty())
+    double randAngle = 1;
+    auto currentTime = std::chrono::system_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - stuckCheckStartTime);
+    if (diff.count() > 1000)
+    {
+        std::cout << "deep rand!!" << std::endl;
+        randAngle = 2;
+        BotStatus = status::move;
+	}
+    if (!path.empty() && !isTrigger(api, targetP))
     {
         std::cout << path.front().x << path.front().y << std::endl;
-        Goto(api, path.front().x, path.front().y, 1);
+        Goto(api, path.front().x, path.front().y, randAngle);
         if (isSurround(api, path.front().x, path.front().y))
             path.pop();
     }

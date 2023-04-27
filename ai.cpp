@@ -13,10 +13,10 @@ extern const bool asynchronous = false;
 // 选手需要依次将player0到player4的职业在这里定义
 
 extern const std::array<THUAI6::StudentType, 4> studentType = {
-    THUAI6::StudentType::Athlete,
-    THUAI6::StudentType::Teacher,
     THUAI6::StudentType::StraightAStudent,
-    THUAI6::StudentType::Sunshine };
+    THUAI6::StudentType::StraightAStudent,
+    THUAI6::StudentType::StraightAStudent,
+    THUAI6::StudentType::StraightAStudent };
 
 extern const THUAI6::TrickerType trickerType = THUAI6::TrickerType::Assassin;
 // 记录函数
@@ -33,9 +33,10 @@ enum class status
     retreat,
     move
 
+
 };
 
-static status BotStatus = status::initial;
+static status BotStatus = status::idle;
 static status LastStatus = status::reset;
 // 存储路径的常量
 const int MAXN = 50;
@@ -68,7 +69,6 @@ void playerBot(IStudentAPI&);
 void moveStatus(IStudentAPI& api);
 void retreatStatus(IStudentAPI& api);
 void initialStatus(IStudentAPI& api);
-
 // 可以在AI.cpp内部声明变量与函数
 
 // 函数
@@ -78,17 +78,24 @@ double Distance(Point, Point);
 std::queue<Point> bfs(Point, Point);
 void Goto(IStudentAPI&, double, double, double); // randAngle = 1，则取波动范围为-0.5pi-0.5pi
 void InitMapForMove(IAPI&);
+void initHwGroup();
+void arrayClear();
 // 状态检查类
 bool isSurround(IStudentAPI&, int, int);
 bool stuckCheck(IStudentAPI&, int); // 注意，n必须在2-10之间
+bool isTrigger(StudentAPI&, Point);//学生和目标点是否在九宫格内
 // debug相关
 void printPathType(IStudentAPI&, std::queue<Point>);
 void printQueue(std::queue<Point> q);
 void printPosition(IStudentAPI&);
 void printPointVector(std::vector<Point>);
 
-// 变量
 
+//决策相关
+void groupJuan(IStudentAPI& api);
+
+// 变量
+static int64_t myPlayerID;
 static THUAI6::PlaceType map[50][50];
 static int steps;
 static int hasinitmap;
@@ -112,14 +119,21 @@ std::vector<Point> door;
 std::vector<Point> window;
 std::vector<Point> gate;
 std::vector<Point> chest;
+//决策相关分组变量
+int hwGroup1Index[5] = {0,1,3,5,7};
+int hwGroup2Index[5] = {2,4,6,8,9};
+std::vector<Point> hwGroup1;
+std::vector<Point> hwGroup2;
 
 
 void AI::play(IStudentAPI& api)
 {
     // 公共操作
+    myPlayerID = this->playerID;
     if (this->playerID == 0)
     {
         // 玩家0执行操作
+        playerBot(api);
     }
     else if (this->playerID == 1)
     {
@@ -129,10 +143,12 @@ void AI::play(IStudentAPI& api)
     else if (this->playerID == 2)
     {
         // 玩家2执行操作
+        playerBot(api);
     }
     else if (this->playerID == 3)
     {
         // 玩家3执行操作
+        playerBot(api);
     }
     // 当然可以写成if (this->playerID == 2||this->playerID == 3)之类的操作
     //  公共操作
@@ -145,7 +161,20 @@ void AI::play(ITrickerAPI& api)
     api.MoveLeft(1000);
 }
 
-
+void arrayClear()
+{
+	int i, j;
+    for (i = 0; i < 50; i++)
+    {
+        for (j = 0; j < 50; j++)
+        {
+			vis[i][j] = 0;
+			dis[i][j] = 0;
+			pre[i][j][0] = 0;
+			pre[i][j][1] = 0;
+		}
+	}
+}
 
 void InitMapForMove(IAPI& api)
 {
@@ -193,17 +222,29 @@ void InitMapForMove(IAPI& api)
         std::cout << std::endl;
     }
 
-    printPointVector(hw);
+    for (int i = 0; i < door.size(); i++)
+    {
+        a[door[i].x][door[i].y] = 0;
+    }
+
     api.Wait();
 }
 
-
+void initHwGroup()
+{
+    for (int i = 0; i < 5; i++)
+    {
+        hwGroup1.emplace_back(hw[hwGroup1Index[i]]);
+        hwGroup2.emplace_back(hw[hwGroup2Index[i]]);
+    }
+}
 
 
 
 // 搜索最短路径
 std::queue<Point> bfs(Point start, Point end)
 {
+    arrayClear();
     std::queue<Point> path;
     std::priority_queue<Node> q;
     q.push(Node(start, 0));
@@ -297,9 +338,19 @@ bool isSurround(IStudentAPI& api, int x, int y)
     return false;
 }
 
+bool isTrigger(IStudentAPI& api, Point p)
+{
+    auto self = api.GetSelfInfo();
+	auto sx = (self->x) / 1000;
+	auto sy = (self->y) / 1000; 
+	if (abs(sx-p.x-0.5)<=1.5 && abs(sy - p.y - 0.5) <= 1.5)
+		return true;
+	return false;
+}
+
 void Goto(IStudentAPI& api, double destX, double destY, double randAngle = 0)
 {
-    std::printf("goto %d,%d\n", destX, destY);
+    //std::printf("goto %d,%d\n", destX, destY);
     auto self = api.GetSelfInfo();
     int sx = self->x;
     int sy = self->y;
@@ -364,10 +415,57 @@ void printPosition(IStudentAPI& api)
     std::cout << "position: (" << sx << "," << sy << ")" << std::endl;
 }
 
+void groupJuan(IStudentAPI& api)
+{
+    std::vector <int> temp;
+    std::vector <Point>hwGroup;
+    if (myPlayerID % 2 == 0)
+    {
+        hwGroup = hwGroup1;
+    }
+    else
+    {
+        hwGroup = hwGroup2;
+    }
+   
+    for (int i = 0; i < hwGroup.size(); i++)
+    {
+        temp.emplace_back(api.GetClassroomProgress(hwGroup[i].x, hwGroup[i].y));
+    }
+    for (int i = 0; i < hwGroup.size(); i++)
+    {
+        //std::cout<<"isTrigger:"<< isTrigger(api, hw[i])<<"progress:"<<temp[i]<<std::endl;
+        if (isTrigger(api, hwGroup[i]) && temp[i] < 10000000)
+        {
+            std::cout << "doing hw:" << i <<"progress:"<<temp[i] << std::endl;
+            api.StartLearning();
+
+            return;
+        }
+    }
+    for (int i = 0; i < hwGroup.size(); i++)
+    {
+        if (temp[i] < 10000000)
+        {
+            std::cout << "goto hw" << i << temp[i] <<std::endl;
+            targetP.x = hwGroup[i].x;
+            targetP.y = hwGroup[i].y;
+            BotStatus = status::initial;
+            return;
+        }
+    }
+}
+
 void playerBot(IStudentAPI& api)
 {
     std::ios::sync_with_stdio(false);
     auto self = api.GetSelfInfo();
+    if (!hasInitMap)
+    {
+        InitMapForMove(api);
+        hasInitMap = true;
+        initHwGroup();
+    }
 
     switch (BotStatus)
     {
@@ -393,6 +491,7 @@ void playerBot(IStudentAPI& api)
     case status::idle:
     {
         std::cout << "idling!" << std::endl;
+        juan(api);
         break;
     }
     api.Wait();
@@ -445,11 +544,7 @@ void retreatStatus(IStudentAPI& api)
 void initialStatus(IStudentAPI& api)
 {
     std::cout << "initial" << std::endl;
-    if (!hasInitMap)
-    {
-        InitMapForMove(api);
-        hasInitMap = true;
-    }
+    
     int x = (api.GetSelfInfo()->x) / 1000;
     int y = (api.GetSelfInfo()->y) / 1000;
     path = bfs(Point(targetP.x, targetP.y), Point(x, y));

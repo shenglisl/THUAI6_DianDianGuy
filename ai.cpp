@@ -347,7 +347,7 @@ bool isSurround(IStudentAPI& api, int x, int y)
     auto sx = (self->x) / 1000;
     auto sy = (self->y) / 1000;
     distance = sqrt((sx - x) * (sx - x) + (sy - y) * (sy - y));
-    if (distance <= 0.5)
+    if (distance <= 0.3)
         return true;
     return false;
 }
@@ -393,7 +393,7 @@ bool stuckCheck(IStudentAPI& api, int n)
         }
         memoryX[n - 1] = sx;
         memoryY[n - 1] = sy;
-        if (memoryX[0] == sx && memoryY[0] == sy)
+        if (abs(memoryX[0] - sx)<100 && abs(memoryY[0] - sy)<100)
         {
             std::cout << "stuck!" << std::endl;
             return true;
@@ -675,11 +675,11 @@ void retreatStatus(IStudentAPI& api)
     double randAngle = 1;
     auto currentTime = std::chrono::system_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - stuckCheckStartTime);
-    if (diff.count() > 1000)
+    if (diff.count() > 500)
     {
         std::cout << "deep rand!!" << std::endl;
         randAngle = 2;
-        BotStatus = status::move;
+        BotStatus = status::initial;
 	}
     if (!path.empty() && !isTrigger(api, targetP))
     {
@@ -710,4 +710,3 @@ void initialStatus(IStudentAPI& api)
     BotStatus = status::move;
     printQueue(path);
 }
-

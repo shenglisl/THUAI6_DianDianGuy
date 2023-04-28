@@ -427,6 +427,7 @@ class AI(IAI):
     trickerTarget = (3, 3)
     bool_INIT_loc = True
     Cx, Cy = 0, 0
+    attack_flag = True
 
     def __init__(self, pID: int):
         self.__playerID = pID
@@ -446,11 +447,20 @@ class AI(IAI):
         # api.EndAllAction()
         selfInfo = api.GetSelfInfo()
         api.PrintSelfInfo()
+        stus = api.GetStudents()
+        if stus:
+            stus.sort(key=lambda stu: dist(selfInfo.x, selfInfo.y, stu.x, stu.y))
+            AI.trickerTarget = (G2C(stus[0].x), G2C(stus[0].y))
+            AI.attack_flag = False
+            if dist(selfInfo.x, selfInfo.y, stus[0].x, stus[0].y) <= sqrt(2)*numOfGridPerCell:
+                api.Attack(direction(selfInfo.x, selfInfo.y, stus[0].x, stus[0].y))
+        else:
+            AI.attack_flag = True
         # 初始化扫描地图
         if bool_mapAbstrct:
             _mapAbstract(api)
             _sample()
-            AI.trickerTarget = MapBlocks.Door6[-1]
+            AI.trickerTarget = (23, 9)
         if AI.bool_INIT_loc:
             AI.Cx, AI.Cy = G2C(selfInfo.x), G2C(selfInfo.y)
             AI.bool_INIT_loc = False
@@ -462,11 +472,18 @@ class AI(IAI):
         #     elif next_node[1]>selfInfo.y:
         if dist(selfInfo.x, selfInfo.y, C2G(G2C(selfInfo.x)), C2G(G2C(selfInfo.y))) < 50:
             AI.Cx, AI.Cy = G2C(selfInfo.x), G2C(selfInfo.y)
-        path = MHTPath(AI.Cx, AI.Cy, *AI.trickerTarget)
-        selfInfo.facingDirection = direction(AI.Cx, AI.Cy, *path[0])
-        # api.Move(dist(selfInfo.x, selfInfo.y, C2G(path[0][0]), C2G(path[0][1]))/selfInfo.speed, selfInfo.facingDirection)
-        api.Move(10, selfInfo.facingDirection)
-        time.sleep(0.01)
+        if AI.attack_flag and AI.trickerTarget != (23, 9) and AI.trickerTarget != (22, 15):
+            AI.trickerTarget = (23, 9)
+        if MHTDist(AI.Cx, AI.Cy, 23, 9) <= 1:
+            AI.trickerTarget = (22, 15)
+        elif MHTDist(AI.Cx, AI.Cy, 22, 15) <= 1:
+            AI.trickerTarget = (23, 9)
+        if MHTDist(AI.Cx, AI.Cy, *AI.trickerTarget) > 1:
+            path = MHTPath(AI.Cx, AI.Cy, *AI.trickerTarget)
+            selfInfo.facingDirection = direction(AI.Cx, AI.Cy, *path[0])
+            # api.Move(dist(selfInfo.x, selfInfo.y, C2G(path[0][0]), C2G(path[0][1]))/selfInfo.speed, selfInfo.facingDirection)
+            api.Move(10, selfInfo.facingDirection)
+            time.sleep(0.01)
         # if isSurrWall(api):
         #     _dir_rv1 = antiDirection(dirWall(api))
         #     # if (_dir_rv2 := outStuckCorner(api)) != 114514:

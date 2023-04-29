@@ -434,6 +434,13 @@ bool progressStuckCheck(int progress, int n)
         return false;
     }
 }
+void progressClear()
+{
+    for (int i = 0; i < 10; i++)
+    {
+		memoryProgress[i] = -2;
+	}
+}
 
 double Distance(Point a, Point b)
 {
@@ -534,12 +541,14 @@ void closestJuan(IStudentAPI& api)
         {
             std::cout << "doing hw:" << i << "progress:" << temp[i] << std::endl;
             api.StartLearning();
+            
             if (progressStuckCheck(temp[i], 9))
             {
                 api.Move(300, rand());
                 BotStatus = status::initial;
                 return;
             }
+            
             return;
         }
     }
@@ -578,12 +587,14 @@ void graduate(IStudentAPI& api)
     {
         std::cout << "graduating!" << "progress:" << api.GetGateProgress(gate[1].x, gate[1].y) << std::endl;
         api.StartOpenGate();
+        
         if (progressStuckCheck(api.GetGateProgress(gate[1].x, gate[1].y), 9))
         {
             api.Move(300, rand());
             BotStatus = status::initial;
             return;
         }
+        
         return;
     }
     else if (isTrigger(api, gate[1]))
@@ -607,6 +618,7 @@ void playerBot(IStudentAPI& api)
         InitMapForMove(api);
         hasInitMap = true;
         initHwGroup();
+        progressClear();
     }
 
     switch (BotStatus)

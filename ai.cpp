@@ -274,20 +274,3 @@ void Goto(IStudentAPI& api, int destX, int destY)
     ang = atan2(delta_y, delta_x);
     api.Move(300, ang);
 }
-void initialStatus(IStudentAPI& api)
-{
-    std::cout << "initial" << std::endl;
-
-    int x = (api.GetSelfInfo()->x) / 1000;
-    int y = (api.GetSelfInfo()->y) / 1000;
-    path = bfs(Point(targetP.x, targetP.y), Point(x, y));
-
-    if (isWindowInPath(api, path))
-    {
-        isCrossingWindow = 1;
-    }
-    IHaveArrived = false;
-    BotStatus = status::move;
-    printQueue(path);
-}
-

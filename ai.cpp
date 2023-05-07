@@ -31,11 +31,6 @@ enum class status
     reset,
     index,
     retreat,
-    avoid_initial,
-    avoid_move,
-    avoid_deepmove,
-    avoid_retreat,
-    avoid_idle,
     move
 };
 
@@ -547,11 +542,6 @@ void closestJuan(IStudentAPI& api)
     auto cellX = sx / 1000;
     auto cellY = sy / 1000;
     int issendmessage = 0;
-    if (isTrickerInsight(api) == 1)
-    {
-        BotStatus = status::avoid_initial;
-        return;
-    }
     for (int i = 0; i < hw.size(); i++)
     {
         temp.emplace_back(api.GetClassroomProgress(hw[i].x, hw[i].y));
@@ -987,6 +977,7 @@ void idleStatus(IStudentAPI& api)
     case 3:
     {
         decision = 0;
+        break;
     }
     default:
     {

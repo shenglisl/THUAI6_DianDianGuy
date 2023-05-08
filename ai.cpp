@@ -31,6 +31,7 @@ enum class status
     reset,
     index,
     retreat,
+    avoid,
     move
 };
 
@@ -433,8 +434,8 @@ bool stuckCheck(IStudentAPI& api, int n)
         return false;
     }
 }
-// 防止持续做作业等时候卡住
 bool progressStuckCheck(int progress, int n) // 需要更新！
+
 {
     /*
     if (n >= 2 && n <= 10)
@@ -996,6 +997,7 @@ void retreatStatus(IStudentAPI& api)
         BotStatus = status::move;
     }
 }
+
 
 void initialStatus(IStudentAPI& api)
 {

@@ -105,6 +105,8 @@ void receiveMessage(IStudentAPI& api);
 
 // 爬窗相关
 bool isWindowInPath(IStudentAPI& api, std::queue<Point> q);
+bool isSurroundWindow(IStudentAPI& api);
+bool isDelayedAfterWindow(IStudentAPI& api);
 
 // 躲避tricker相关
 int nearestPointDistance;
@@ -162,6 +164,8 @@ bool isGraduate = false;
 static int framecount = 0; // 计数帧数
 // 爬窗相关变量
 static bool isCrossingWindow = 0;
+static int CrossWindowCount = 0;
+
 // 通信相关变量
 static bool isfinished[10] = { false };
 void AI::play(IStudentAPI& api)
@@ -736,13 +740,34 @@ void stringToBoolArray(const std::string& str, bool a[], int size)
         a[i] = (str[i] == '1');
     }
 }
-bool isWindowInPath(IStudentAPI& api, std::queue<Point> q)
+bool isWindowInPath(IStudentAPI& api, std::queue<Point> p)
 {
-    for (int i = 0; i < path.size(); i++)
+    std::queue<Point> q = p;
+    while(!q.empty())
     {
         if ((int)api.GetPlaceType(q.front().x, q.front().y) == 7)
         {
             return true;
+        }
+        q.pop();
+        std::cout << "popping" << std::endl;
+    }
+     return false;
+}
+bool isSurroundWindow(IStudentAPI& api)
+{
+    auto self = api.GetSelfInfo();
+    int x = self->x / 1000;
+    int y = self->y / 1000;
+    if (x < 47 && x >2 && y < 47 && y >2)
+    {
+        for (int i = x - 2; i <= x + 2; i++)
+        {
+            for (int j = y - 2; j <= y + 2; j++)
+            {
+                if ((int)api.GetPlaceType(i, j) == 7)
+                    return true;
+            }      
         }
     }
     return false;
@@ -769,6 +794,7 @@ void receiveMessage(IStudentAPI& api)
         BotStatus = status::initial;
     }
 }
+
 bool isTrickerInsight(IStudentAPI& api)
 {
     std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
@@ -779,8 +805,20 @@ bool isTrickerInsight(IStudentAPI& api)
     else
         return false;
 }
-// ——————————————状态机函数—————————————————————————————
-void botInit(IStudentAPI& api)
+//爬完窗后不会重复爬
+bool isDelayedAfterWindow(IStudentAPI& api)
+{
+    CrossWindowCount++;
+    if (CrossWindowCount >= 10)
+    {
+        CrossWindowCount = 0;
+        return true;
+    }
+    else
+        return false;
+
+}
+void botInit(IStudentAPI& api)      //状态机的初始化
 {
     std::ios::sync_with_stdio(false);
     auto self = api.GetSelfInfo();
@@ -829,9 +867,11 @@ void botInit(IStudentAPI& api)
         }
     }
 }
+// ——————————————状态机函数—————————————————————————————
 void playerBot(IStudentAPI& api)
 {
     botInit(api);
+    std::cout << "isSurroundWindow:    " << isSurroundWindow(api) << std::endl;
     switch (BotStatus)
     {
         // 有限状态机的core
@@ -860,13 +900,23 @@ void playerBot(IStudentAPI& api)
     }
         }
         api.Wait();
-    
 }
 
 void moveStatus(IStudentAPI& api)
 {
     auto self = api.GetSelfInfo();
     std::cout << "move!" << std::endl;
+    std::cout << "isSurroundWindow:" << isSurroundWindow(api) << std::endl;
+    if (isCrossingWindow == 1 )
+    {
+        if (isSurroundWindow(api) == 1 && isDelayedAfterWindow(api) == 1)
+        {
+            std::cout << "my skipping window!" << std::endl;
+            api.SkipWindow();
+            api.SkipWindow();
+            
+        }
+    }
     if ((int)api.GetPlaceType(targetP.x, targetP.y) == 4)
     {
         if (!path.empty() && !isTrigger(api, targetP))
@@ -913,6 +963,14 @@ void moveStatus(IStudentAPI& api)
 void retreatStatus(IStudentAPI& api)
 {
     std::cout << "retreat" << std::endl;
+    if (isCrossingWindow == 1)
+    {
+        if (isSurroundWindow(api) == 1 && isDelayedAfterWindow(api) == 1)
+        {
+            std::cout << "my skipping window!" << std::endl;
+            api.SkipWindow();
+        }
+    }
     double randAngle = 1;
     auto currentTime = std::chrono::system_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - stuckCheckStartTime);
@@ -933,7 +991,6 @@ void retreatStatus(IStudentAPI& api)
     {
         BotStatus = status::idle;
     }
-
     if (!stuckCheck(api, 3))
     {
         BotStatus = status::move;
@@ -952,6 +1009,9 @@ void initialStatus(IStudentAPI& api)
     {
         isCrossingWindow = 1;
     }
+    else
+        isCrossingWindow = 0;
+    std::cout << "isCrossingWindow" << isCrossingWindow << std::endl;
     IHaveArrived = false;
     BotStatus = status::move;
     printQueue(path);

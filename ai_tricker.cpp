@@ -512,7 +512,7 @@ void Goto(ITrickerAPI& api, double destX, double destY, double randAngle = 0)
     // 直接走
     ang = atan2(delta_y, delta_x);
     std::cout<< "angle:" << ang << std::endl;
-    if (delta_x != 0 && delta_y != 0)
+    if (delta_x != 0 || delta_y != 0)
         api.Move(300, ang + (std::rand() % 10 - 5) * PI / 10 * randAngle);
 }
 // 判断实际速度是否为0（防止卡墙上）
@@ -727,15 +727,14 @@ void moveStatus(ITrickerAPI& api)
     std::cout << "isSurroundWindow:" << isSurroundWindow(api) << std::endl;
     if (isCrossingWindow == 1)
     {
-        if (isSurroundWindow(api) == 1 && isDelayedAfterWindow(api) == 1)
+        if (isDelayedAfterWindow(api) == 1 && isSurroundWindow(api) == 1 )
         {
             std::cout << "my skipping window!" << std::endl;
             api.SkipWindow();
             api.SkipWindow();
-
         }
     }
-    if (isSurround(api, path.front().x + 0.5, path.front().y + 0.5))
+    if (isSurround(api, path.front().x + 0.5, path.front().y + 0.5) && !path.empty())
         path.pop();
 
     if ((int)api.GetPlaceType(targetP.x, targetP.y) == 4)

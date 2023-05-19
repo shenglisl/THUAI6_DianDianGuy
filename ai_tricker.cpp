@@ -17,7 +17,7 @@ extern const std::array<THUAI6::StudentType, 4> studentType = {
     THUAI6::StudentType::StraightAStudent,
     THUAI6::StudentType::StraightAStudent };
 
-extern const THUAI6::TrickerType trickerType = THUAI6::TrickerType::Assassin;
+extern const THUAI6::TrickerType trickerType = THUAI6::TrickerType::Klee;
 // 记录函数
 
 // 定义非常多的状态（有限状态机）
@@ -39,6 +39,7 @@ static status LastStatus = status::reset;
 // 存储路径的常量
 const int MAXN = 50;
 int a[MAXN][MAXN];      // 存储地图
+bool blank[MAXN][MAXN];  // 存储蒙版
 int vis[MAXN][MAXN];    // 标记数组，记录每个点是否被访问过
 int dis[MAXN][MAXN];    // 记录每个点到起点的最短距离
 int pre[MAXN][MAXN][2]; // 记录每个点的前驱节点
@@ -204,7 +205,12 @@ void antiJuan(ITrickerAPI& api) {
                 stu_loc = temp_loc;
             }
             if (Distance(now_loc, temp_loc) <= sqrt(2) && (int)stus[i]->playerState != 3) {
-                api.Attack(atan2(temp_loc.y - now_loc.y, temp_loc.x - now_loc.x));
+                if (true)
+                {
+                    api.UseSkill(0);
+                    std::cout << "bengbengzhadan!!!!!"<<std::endl;
+                }
+                api.Attack(atan2(stus[i]->y - api.GetSelfInfo()->y,stus[i]->x - api.GetSelfInfo()->x));
                 BotStatus = status::idle;
                 return;
             }
@@ -267,6 +273,11 @@ void patrolMode1(ITrickerAPI& api)
             targetP.y = hw[i].y;
         }
     }
+    if (targetP.x == 0 && targetP.y == 0)
+    {
+        BotStatus = status::idle;
+        return;
+    }
     BotStatus = status::initial;
     return;
 }
@@ -319,6 +330,16 @@ void boolArrayReset(bool arr[], int n)
     for (int i = 0; i < n; i++)
     {
         arr[i] = 0;
+    }
+}
+void blankReset()
+{
+    for (int i = 0; i < MAXN; i++)
+    {
+        for (int j = 0; j < MAXN; j++)
+        {
+            blank[i][j] = 0;
+        }
     }
 }
 void searchingArrayClear()
@@ -385,7 +406,7 @@ void InitMapForMove(IAPI& api)
 
     for (int i = 0; i < door.size(); i++)
     {
-        a[door[i].x][door[i].y] = 1;
+        a[door[i].x][door[i].y] = 0;
     }
     for (int i = 0; i < window.size(); i++)
     {
@@ -420,7 +441,7 @@ std::queue<Point> bfs(Point start, Point end)
             }
             break;
         }
-        if (p.x - 1 >= 0 && !vis[p.x - 1][p.y] && a[p.x - 1][p.y] == 0)
+        if (p.x - 1 >= 0 && !vis[p.x - 1][p.y] && a[p.x - 1][p.y] == 0 && blank[p.x - 1][p.y] == 0)
         { // 向上搜索
             vis[p.x - 1][p.y] = 1;
             dis[p.x - 1][p.y] = dist + 1;
@@ -428,7 +449,7 @@ std::queue<Point> bfs(Point start, Point end)
             pre[p.x - 1][p.y][1] = p.y;
             q.push(Node(Point(p.x - 1, p.y), dist + 1));
         }
-        if (p.x + 1 < MAXN && !vis[p.x + 1][p.y] && a[p.x + 1][p.y] == 0)
+        if (p.x + 1 < MAXN && !vis[p.x + 1][p.y] && a[p.x + 1][p.y] == 0 && blank[p.x + 1][p.y] == 0)
         { // 向下搜索
             vis[p.x + 1][p.y] = 1;
             dis[p.x + 1][p.y] = dist + 1;
@@ -436,7 +457,7 @@ std::queue<Point> bfs(Point start, Point end)
             pre[p.x + 1][p.y][1] = p.y;
             q.push(Node(Point(p.x + 1, p.y), dist + 1));
         }
-        if (p.y - 1 >= 0 && !vis[p.x][p.y - 1] && a[p.x][p.y - 1] == 0)
+        if (p.y - 1 >= 0 && !vis[p.x][p.y - 1] && a[p.x][p.y - 1] == 0 && blank[p.x][p.y - 1] == 0)
         { // 向左搜索
             vis[p.x][p.y - 1] = 1;
             dis[p.x][p.y - 1] = dist + 1;
@@ -444,7 +465,7 @@ std::queue<Point> bfs(Point start, Point end)
             pre[p.x][p.y - 1][1] = p.y;
             q.push(Node(Point(p.x, p.y - 1), dist + 1));
         }
-        if (p.y + 1 < MAXN && !vis[p.x][p.y + 1] && a[p.x][p.y + 1] == 0)
+        if (p.y + 1 < MAXN && !vis[p.x][p.y + 1] && a[p.x][p.y + 1] == 0 && blank[p.x][p.y + 1] == 0)
         { // 向右搜索
             vis[p.x][p.y + 1] = 1;
             dis[p.x][p.y + 1] = dist + 1;
@@ -530,7 +551,7 @@ bool stuckCheck(ITrickerAPI& api, int n)
         }
         memoryX[n - 1] = sx;
         memoryY[n - 1] = sy;
-        if (abs(memoryX[0] - sx) < 100 && abs(memoryY[0] - sy) < 100)
+        if (abs(memoryX[0] - sx) < 200 && abs(memoryY[0] - sy) < 200)
         {
             std::cout << "stuck!" << std::endl;
             return true;
@@ -655,16 +676,36 @@ void botInit(ITrickerAPI& api)      //状态机的初始化
         InitMapForMove(api);
         hasInitMap = true;
     }
+    blankReset();
+
+    int doorFlag = 0;
+    for (int itr = 0; itr < door.size(); itr++)
+    {
+        if (api.HaveView(door[itr].x, door[itr].y) == 1)
+        {
+            if (!api.IsDoorOpen(door[itr].x, door[itr].y))
+            {
+                a[door[itr].x][door[itr].y] = 1;
+                doorFlag = 1;
+            }
+        }
+    }
+    if (doorFlag == 1)
+    {
+        InitMapForMove(api);
+    }
 
     auto stus = api.GetStudents();
     int stuNum = 0;
     for (int i = 0; i < stus.size(); i++)
     {
+        blank[stus[i]->x / 1000][stus[i]->y / 1000] = 1;
         if ((int)stus[i]->playerState != 3)
         {
             stuNum++;
         }
     }
+    blank[self->x/1000][self->y/1000] = 0;
     std::cout << "decision:" << decision << "stu:" << stuNum << std::endl;
     if (decision == 1)
     {
@@ -793,10 +834,10 @@ void retreatStatus(ITrickerAPI& api)
     double randAngle = 1;
     auto currentTime = std::chrono::system_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - stuckCheckStartTime);
-    if (diff.count() > 500)
+    if (diff.count() > 200)
     {
         std::cout << "deep rand!!" << std::endl;
-        randAngle = 2;
+        randAngle = 3;
         BotStatus = status::initial;
     }
     if (!path.empty() && !isTrigger(api, targetP))
@@ -824,7 +865,11 @@ void initialStatus(ITrickerAPI& api)
     int x = (api.GetSelfInfo()->x) / 1000;
     int y = (api.GetSelfInfo()->y) / 1000;
     path = bfs(Point(targetP.x, targetP.y), Point(x, y));
-
+    if (path.empty())
+    {
+        BotStatus = status::idle;
+        return;
+    }
     if (isWindowInPath(api, path))
     {
         isCrossingWindow = 1;

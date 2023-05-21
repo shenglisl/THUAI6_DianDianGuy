@@ -3,8 +3,6 @@
 #include <queue>
 #include <array>
 #include <chrono>
-#include <cstdlib>
-#include <ctime>
 #include "AI.h"
 #include "constants.h"
 
@@ -13,14 +11,13 @@
 extern const bool asynchronous = false;
 
 // 选手需要依次将player0到player4的职业在这里定义
-
 extern const std::array<THUAI6::StudentType, 4> studentType = {
-    THUAI6::StudentType::Teacher,
-    THUAI6::StudentType::Teacher,
-    THUAI6::StudentType::Teacher,
-    THUAI6::StudentType::Teacher };
+    THUAI6::StudentType::StraightAStudent,
+    THUAI6::StudentType::StraightAStudent,
+    THUAI6::StudentType::StraightAStudent,
+    THUAI6::StudentType::StraightAStudent };
 
-extern const THUAI6::TrickerType trickerType = THUAI6::TrickerType::Assassin;
+extern const THUAI6::TrickerType trickerType = THUAI6::TrickerType::Klee;
 // 记录函数
 
 // 定义非常多的状态（有限状态机）
@@ -42,7 +39,7 @@ static status LastStatus = status::reset;
 // 存储路径的常量
 const int MAXN = 50;
 int a[MAXN][MAXN];      // 存储地图
-bool blank[MAXN][MAXN];
+bool blank[MAXN][MAXN];  // 存储蒙版
 int vis[MAXN][MAXN];    // 标记数组，记录每个点是否被访问过
 int dis[MAXN][MAXN];    // 记录每个点到起点的最短距离
 int pre[MAXN][MAXN][2]; // 记录每个点的前驱节点
@@ -67,67 +64,47 @@ struct Node
     }
 };
 // 状态机函数
-void playerBot(IStudentAPI& api);
-void teacherBot(IStudentAPI& api);
-void moveStatus(IStudentAPI& api);
-void retreatStatus(IStudentAPI& api);
-void initialStatus(IStudentAPI& api);
-void idleStatus(IStudentAPI& api);
+void playerBot(ITrickerAPI&);
+void moveStatus(ITrickerAPI& api);
+void retreatStatus(ITrickerAPI& api);
+void initialStatus(ITrickerAPI& api);
+void idleStatus(ITrickerAPI& api);
 
-// 可以在AI.cpp内部声明变量与函数
 
 // 函数
 
 // 循迹相关
 double Distance(Point, Point);
 std::queue<Point> bfs(Point, Point);
-void Goto(IStudentAPI&, double, double, double); // randAngle = 1，则取波动范围为-0.5pi-0.5pi
+void Goto(ITrickerAPI&, double, double, double); // randAngle = 1，则取波动范围为-0.5pi-0.5pi
 void InitMapForMove(IAPI&);
 //void initHwGroup();
-void arrayClear();
+void searchingArrayClear();
 int pathLen(Point, Point);
 
 // 状态检查类
-bool isSurround(IStudentAPI&, int, int);
-bool stuckCheck(IStudentAPI&, int); // 注意，n必须在2-10之间
+bool isSurround(ITrickerAPI&, int, int);
+bool stuckCheck(ITrickerAPI&, int); // 注意，n必须在2-10之间
 bool progressStuckCheck(int, int);
-bool isTrigger(StudentAPI&, Point); // 学生和目标点是否在九宫格内
-
+int boolArrayCount(bool[], int);
+void boolArrayReset(bool[], int);
+bool isTrigger(ITrickerAPI&, Point);
 // debug相关
-void printPathType(IStudentAPI&, std::queue<Point>);
+void printPathType(ITrickerAPI&, std::queue<Point>);
 void printQueue(std::queue<Point> q);
-void printPosition(IStudentAPI&);
+void printPosition(ITrickerAPI&);
 void printPointVector(std::vector<Point>);
 
 // 决策相关
 
-//void groupJuan(IStudentAPI& api);
-void closestJuan(IStudentAPI& api);
-void graduate(IStudentAPI& api);
+void antiJuan(ITrickerAPI& api);
 
-// 发送信息相关
-void receiveMessage(IStudentAPI& api);
-void sendMyMessage(IStudentAPI& api);
 
-// 爬窗开关门相关
-bool isWindowInPath(IStudentAPI& api, std::queue<Point> q);
-bool isSurroundWindow(IStudentAPI& api);
-bool isDelayedAfterWindow(IStudentAPI& api);
-void isDoorClosed(IStudentAPI& api);
-// 躲避tricker相关
-Point findNearestPoint(IStudentAPI& api, int n);
-double tricker_distance(IStudentAPI& api);
-bool isTrickerInsight(IStudentAPI& api);
-bool isStudentInsight(IStudentAPI& api);
+// 爬窗相关
+bool isWindowInPath(ITrickerAPI& api, std::queue<Point> q);
+bool isSurroundWindow(ITrickerAPI& api);
+bool isDelayedAfterWindow(ITrickerAPI& api);
 
-//惩罚tricker相关
-void gotoTricker(IStudentAPI& api);
-void gotoFarestStudent(IStudentAPI& api);
-void gotoNearestStudent(IStudentAPI& api);
-
-//辅助函数相关
-int findMaxInArray(double a[], int size);
-int findMinInArray(double a[], int size);
 // 变量
 
 // 循迹相关变量
@@ -141,7 +118,6 @@ static bool IHaveArrived = false;
 static int lastX = 0, lastY = 0;
 static int lastFrameCount = 0;
 std::queue<Point> path;
-double derectionBeforeRetreat;
 
 // stuckCheck()相关变量
 int32_t memoryX[10];
@@ -163,47 +139,30 @@ std::vector<Point> chest;
 // 决策相关变量
 // 总决策函数相关变量
 int decision;
-static bool isReinitial;
+
 /*
-decision == 1 写作业
-decision == 2 毕业
-decision == 3 逃跑
-decision == 4 勉励
+    decision = 1 追击
+    decision = 2 巡逻
 ...
 */
-//躲避Tricker相关变量
-static bool isReinitialForFarMove;
-int avoidCount;
-static bool formerAvoidState;
-int formerState;
-int tricker_x;
-int tricker_y;
-// groupJuan()相关变量
-/*
-int hwGroup1Index[5] = { 0,1,3,5,7 };
-int hwGroup2Index[5] = { 2,4,6,8,9 };
-std::vector<Point> hwGroup1;
-std::vector<Point> hwGroup2;
-*/
-// graduate()相关变量
-bool isGraduate = false;
-static int framecount = 0; // 计数帧数
-// rouse()相关变量
-int rouseTarget = -1;
 // 爬窗相关变量
 static bool isCrossingWindow = 0;
-static int CrossWindowCount = 0;
-static bool climbingCheck;
-static int climbingFrameCount;
-// 通信相关变量
-static bool isSendMessage;
-static bool hwIsFinished[10];
-static int playerDecision[4];
-static int playerState[4];
-static int playerHP[4];
-static Point playerPosition[4];
-static Point trickerPosition;
-//static int player
+static bool climbingCheck = 0;
+static int climbingFrameCount = 0;
+// 巡逻相关变量
+bool hwIsFinished[10];
+bool hwControl[10];// 判断是否已经到达过该点
+int patrolMode;
+
+/*
+patrolMode = 1 在作业间巡逻
+patrolMode = 2 在作业和校门间巡逻
+patrolMode = 3 在校门间巡逻
+*/
+// 追击相关变量
+int chasingFrameCount;
+bool chasingProtect;
+//========================================
 void AI::play(IStudentAPI& api)
 {
     // 公共操作
@@ -211,22 +170,18 @@ void AI::play(IStudentAPI& api)
     if (this->playerID == 0)
     {
         // 玩家0执行操作
-        teacherBot(api);
     }
     else if (this->playerID == 1)
     {
         // 玩家1执行操作
-        teacherBot(api);
     }
     else if (this->playerID == 2)
     {
         // 玩家2执行操作
-        teacherBot(api);
     }
     else if (this->playerID == 3)
     {
         // 玩家3执行操作
-        teacherBot(api);
     }
     // 当然可以写成if (this->playerID == 2||this->playerID == 3)之类的操作
     //  公共操作
@@ -236,19 +191,154 @@ void AI::play(ITrickerAPI& api)
 {
     auto self = api.GetSelfInfo();
     api.PrintSelfInfo();
-    // api.MoveLeft(1000);
+    playerBot(api);
 }
-void arrayClear()
-{
-    int i, j;
-    for (i = 0; i < 50; i++)
-    {
-        for (j = 0; j < 50; j++)
+
+void antiJuan(ITrickerAPI& api) {
+    auto stus = api.GetStudents();
+    if (stus.size() != 0) {
+        Point stu_loc = { -100,-100 };
+        Point now_loc = { api.GetSelfInfo()->x / 1000, api.GetSelfInfo()->y / 1000 };
+        for (int i = 0; i < stus.size(); i++) {
+            Point temp_loc = { stus[i]->x / 1000, stus[i]->y / 1000 };
+            if (Distance(now_loc, temp_loc) < Distance(now_loc, stu_loc) && (int)stus[i]->playerState != 3) {
+                stu_loc = temp_loc;
+            }
+            if (Distance(now_loc, temp_loc) <= sqrt(2) && (int)stus[i]->playerState != 3) {
+                if (true)
+                {
+                    api.UseSkill(0);
+                    std::cout << "bengbengzhadan!!!!!"<<std::endl;
+                }
+                api.Attack(atan2(stus[i]->y - api.GetSelfInfo()->y,stus[i]->x - api.GetSelfInfo()->x));
+                BotStatus = status::idle;
+                return;
+            }
+        }
+        if (stu_loc.x == -100 && stu_loc.y == -100)
         {
-            vis[i][j] = 0;
-            dis[i][j] = 0;
-            pre[i][j][0] = 0;
-            pre[i][j][1] = 0;
+            decision = 2;
+            BotStatus = status::idle;
+        }
+        else
+        {
+            targetP = stu_loc;
+            BotStatus = status::initial;
+        }
+
+        return;
+    }
+    decision = 2;
+    BotStatus = status::idle;
+    return;
+}
+void patrolMode1(ITrickerAPI& api)
+{
+    double dis = 999999;
+    std::vector<int> temp;
+    auto self = api.GetSelfInfo();
+    auto sx = self->x;
+    auto sy = self->y;
+    auto cellX = sx / 1000;
+    auto cellY = sy / 1000;
+    for (int i = 0; i < hw.size(); i++)
+    {
+        temp.emplace_back(api.GetClassroomProgress(hw[i].x, hw[i].y));
+        std::cout << "temp" << i << ":" << temp[i] << std::endl;
+    }
+    for (int i = 0; i < hw.size(); i++)
+    {
+        if (hwIsFinished[i] == 1)
+        {
+            continue;
+        }
+        if (isTrigger(api, hw[i]) && temp[i] < 10000000 && hwIsFinished[i] == 0)
+        {
+            hwControl[i] = 1;
+        }
+        if (temp[i] == 10000000)
+        {
+            hwIsFinished[i] = 1;
+        }
+    }
+
+    targetP = Point(0, 0);
+    for (int i = 0; i < hw.size(); i++)
+    {
+        int tempDis = pathLen(hw[i], Point(cellX, cellY));
+        if (tempDis < dis && hwIsFinished[i] == 0 && hwControl[i] == 0)
+        {
+            dis = tempDis;
+            targetP.x = hw[i].x;
+            targetP.y = hw[i].y;
+        }
+    }
+    if (targetP.x == 0 && targetP.y == 0)
+    {
+        BotStatus = status::idle;
+        return;
+    }
+    BotStatus = status::initial;
+    return;
+}
+void patrolMode2(ITrickerAPI& api)
+{
+}
+void patrolMode3(ITrickerAPI& api)
+{
+}
+
+void walkingAround(ITrickerAPI& api)
+{
+
+    patrolMode = 1;
+    if (boolArrayCount(hwControl, 10) >= 10 - boolArrayCount(hwIsFinished, 10))
+    {
+        std::cout << "hwReset!!!" << std::endl;
+        boolArrayReset(hwControl, 10);
+    }
+    switch (patrolMode)
+    {
+    case 1:
+        patrolMode1(api);
+        break;
+    case 2:
+        patrolMode2(api);
+        break;
+    case 3:
+        patrolMode3(api);
+        break;
+    default:
+        break;
+    }
+
+}
+int boolArrayCount(bool arr[], int n)
+{
+    int count = 0;
+    for (int i = 0; i < n; i++)
+    {
+        if (arr[i] == 1)
+        {
+            count++;
+        }
+    }
+    return count;
+}
+void boolArrayReset(bool arr[], int n)
+{
+    for (int i = 0; i < n; i++)
+    {
+        arr[i] = 0;
+    }
+}
+void blankReset()
+{
+    for (int i = 0; i < MAXN; i++)
+    {
+        for (int j = 0; j < MAXN; j++)
+        {
+            blank[i][j] = 0;
         }
     }
 }
@@ -269,6 +359,9 @@ void searchingArrayClear()
 void InitMapForMove(IAPI& api)
 {
     int i, j;
+    std::this_thread::sleep_for(std::chrono::seconds(2)); // 休眠 2 秒
+    a[26][42] = 1;
+    a[13][48] = 1;
     for (i = 0; i < 50; i++)
     {
         for (j = 0; j < 50; j++)
@@ -321,16 +414,7 @@ void InitMapForMove(IAPI& api)
     }
     api.Wait();
 }
-/*
-void initHwGroup()
-{
-    for (int i = 0; i < 5; i++)
-    {
-        hwGroup1.emplace_back(hw[hwGroup1Index[i]]);
-        hwGroup2.emplace_back(hw[hwGroup2Index[i]]);
-    }
-}
-*/
+
 // 搜索最短路径
 std::queue<Point> bfs(Point start, Point end)
 {
@@ -415,7 +499,7 @@ void printPointVector(std::vector<Point> v)
     }
     std::cout << std::endl;
 }
-bool isSurround(IStudentAPI& api, int x, int y)
+bool isSurround(ITrickerAPI& api, int x, int y)
 {
     double distance;
     auto self = api.GetSelfInfo();
@@ -426,7 +510,7 @@ bool isSurround(IStudentAPI& api, int x, int y)
         return true;
     return false;
 }
-bool isTrigger(IStudentAPI& api, Point p)
+bool isTrigger(ITrickerAPI& api, Point p)
 {
     auto self = api.GetSelfInfo();
     auto sx = (self->x) / 1000;
@@ -435,7 +519,7 @@ bool isTrigger(IStudentAPI& api, Point p)
         return true;
     return false;
 }
-void Goto(IStudentAPI& api, double destX, double destY, double randAngle = 0)
+void Goto(ITrickerAPI& api, double destX, double destY, double randAngle = 0)
 {
     // std::printf("goto %d,%d\n", destX, destY);
     auto self = api.GetSelfInfo();
@@ -444,16 +528,16 @@ void Goto(IStudentAPI& api, double destX, double destY, double randAngle = 0)
 
     auto delta_x = (double)(destX * 1000 - sx);
     auto delta_y = (double)(destY * 1000 - sy);
-    std::cout << "dx" << delta_x << "dy" << delta_y << std::endl;
+    std::cout <<"dx" << delta_x <<"dy"<< delta_y << std::endl;
     double ang = 0;
     // 直接走
     ang = atan2(delta_y, delta_x);
-    std::cout << "angle:" << ang << std::endl;
+    std::cout<< "angle:" << ang << std::endl;
     if (delta_x != 0 || delta_y != 0)
         api.Move(300, ang + (std::rand() % 10 - 5) * PI / 10 * randAngle);
 }
 // 判断实际速度是否为0（防止卡墙上）
-bool stuckCheck(IStudentAPI& api, int n)
+bool stuckCheck(ITrickerAPI& api, int n)
 {
     if (n >= 2 && n <= 10)
     {
@@ -467,7 +551,7 @@ bool stuckCheck(IStudentAPI& api, int n)
         }
         memoryX[n - 1] = sx;
         memoryY[n - 1] = sy;
-        if (abs(memoryX[0] - sx) < 100 && abs(memoryY[0] - sy) < 100)
+        if (abs(memoryX[0] - sx) < 200 && abs(memoryY[0] - sy) < 200)
         {
             std::cout << "stuck!" << std::endl;
             return true;
@@ -484,7 +568,7 @@ bool stuckCheck(IStudentAPI& api, int n)
 }
 bool progressStuckCheck(int progress, int n) // 需要更新！
 
-{   
+{
     /*
     if (n >= 2 && n <= 10)
     {
@@ -514,20 +598,12 @@ double Distance(Point a, Point b)
 {
     return (sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)));
 }
-double angle(double x1, double y1, double x2, double y2)
-{
-    double dot_product = x1 * x2 + y1 * y2;
-    double len1 = sqrt(x1 * x1 + y1 * y1);
-    double len2 = sqrt(x2 * x2 + y2 * y2);
-    double cos_theta = dot_product / (len1 * len2);
-    return acos(cos_theta);
-}
 int pathLen(Point a, Point b)
 {
     auto tempPath = bfs(a, b);
     return tempPath.size();
 }
-void printPathType(IStudentAPI& api, std::queue<Point> q)
+void printPathType(ITrickerAPI& api, std::queue<Point> q)
 {
     while (!q.empty())
     {
@@ -536,315 +612,15 @@ void printPathType(IStudentAPI& api, std::queue<Point> q)
     }
     std::cout << std::endl;
 }
-void printPosition(IStudentAPI& api)
+void printPosition(ITrickerAPI& api)
 {
     auto self = api.GetSelfInfo();
     auto sx = self->x;
     auto sy = self->y;
     std::cout << "position: (" << sx << "," << sy << ")" << std::endl;
 }
-/*
-void groupJuan(IStudentAPI& api) //暂不使用
-{
-    std::vector <int> temp;
-    std::vector <Point>hwGroup;
-    if (myPlayerID % 2 == 0)
-    {
-        hwGroup = hwGroup1;
-    }
-    else
-    {
-        hwGroup = hwGroup2;
-    }
 
-    for (int i = 0; i < hwGroup.size(); i++)
-    {
-        temp.emplace_back(api.GetClassroomProgress(hwGroup[i].x, hwGroup[i].y));
-    }
-    for (int i = 0; i < hwGroup.size(); i++)
-    {
-        //std::cout<<"isTrigger:"<< isTrigger(api, hw[i])<<"progress:"<<temp[i]<<std::endl;
-        if (isTrigger(api, hwGroup[i]) && temp[i] < 10000000)
-        {
-            std::cout << "doing hw:" << i << "progress:" << temp[i] << std::endl;
-            api.StartLearning();
-            if (progressStuckCheck(temp[i], 9))
-            {
-                api.Move(300, rand());
-                BotStatus = status::initial;
-                return;
-            }
-
-            return;
-        }
-    }
-    for (int i = 0; i < hwGroup.size(); i++)
-    {
-        if (temp[i] < 10000000)
-        {
-            std::cout << "goto hw" << i << temp[i] << std::endl;
-            targetP.x = hwGroup[i].x;
-            targetP.y = hwGroup[i].y;
-            BotStatus = status::initial;
-            return;
-        }
-    }
-    std::cout << "graduate!!" << std::endl;
-    isGraduate = true;
-}
-*/
-void closestJuan(IStudentAPI& api)
-{
-    double dis = 999999;
-    std::vector<int> temp;
-    auto self = api.GetSelfInfo();
-    auto sx = self->x;
-    auto sy = self->y;
-    auto cellX = sx / 1000;
-    auto cellY = sy / 1000;
-    for (int i = 0; i < hw.size(); i++)
-    {
-        temp.emplace_back(api.GetClassroomProgress(hw[i].x, hw[i].y));
-        std::cout << "temp" << i << ":" << temp[i] << std::endl;
-    }
-    for (int i = 0; i < hw.size(); i++)
-    {
-        // std::cout<<"isTrigger:"<< isTrigger(api, hw[i])<<"progress:"<<temp[i]<<std::endl;
-        if (hwIsFinished[i] == 1)
-        {
-            continue;
-        }
-        if (isTrigger(api, hw[i]) && temp[i] < 10000000 && hwIsFinished[i] == 0)
-        {
-            std::cout << "doing hw:" << i << "progress:" << temp[i] << std::endl;
-            api.StartLearning();
-            if (progressStuckCheck(temp[i], 9))
-            {
-                api.Move(300, rand());
-                BotStatus = status::initial;
-                return;
-            }
-            return;
-        }
-        if (temp[i] == 10000000)
-        {
-            hwIsFinished[i] = 1;
-            isSendMessage = 1;
-            std::cout << "work finished!" << std::endl;
-            std::cout << "now hwIsFinished:";
-            for (int m = 0; m < 10; m++)
-            {
-                std::cout << hwIsFinished[m];
-            }
-        }
-    }
-
-    targetP = Point(0, 0);
-    for (int i = 0; i < hw.size(); i++)
-    {
-        int tempDis = pathLen(hw[i], Point(cellX, cellY));
-        if (temp[i] < 10000000 && tempDis < dis && hwIsFinished[i] == 0)
-        {
-            dis = tempDis;
-            targetP.x = hw[i].x;
-            targetP.y = hw[i].y;
-        }
-    }
-    if (targetP.x == 0 && targetP.y == 0)
-    {
-        std::cout << "graduate!!" << std::endl;
-        isGraduate = true;
-    }
-    else
-    {
-        BotStatus = status::initial;
-        return;
-    }
-}
-void graduate(IStudentAPI& api)
-{
-    auto self = api.GetSelfInfo();
-    auto sx = self->x;
-    auto sy = self->y;
-    auto cellX = sx / 1000;
-    auto cellY = sy / 1000;
-    auto selfP = Point(cellX, cellY);
-    if (isTrigger(api, gate[1]) && api.GetGateProgress(gate[1].x, gate[1].y) < 18000)
-    {
-        std::cout << "graduating!"
-            << "progress:" << api.GetGateProgress(gate[1].x, gate[1].y) << std::endl;
-        api.StartOpenGate();
-        if (progressStuckCheck(api.GetGateProgress(gate[1].x, gate[1].y), 9))
-        {
-            api.Move(300, rand());
-            BotStatus = status::initial;
-            return;
-        }
-        return;
-    }
-    else if (isTrigger(api, gate[1]))
-    {
-        api.Graduate();
-    }
-    else
-    {
-        targetP.x = gate[1].x;
-        targetP.y = gate[1].y;
-        BotStatus = status::initial;
-    }
-}
-void rouse(IStudentAPI& api)
-{
-    auto self = api.GetSelfInfo();
-    auto sx = self->x;
-    auto sy = self->y;
-    auto cellX = sx / 1000;
-    auto cellY = sy / 1000;
-    auto selfP = Point(cellX, cellY);
-    auto infoInsight = api.GetStudents();
-    int addictProgress = 0;
-    if (rouseTarget == -1)
-    {
-        BotStatus = status::idle;
-        return;
-    }
-    if (isTrigger(api, playerPosition[rouseTarget]) && playerState[rouseTarget] == 3)
-    {
-        api.StartRouseMate(rouseTarget);
-        return;
-    }
-    else if (playerState[rouseTarget] == 3)
-    {
-        targetP.x = playerPosition[rouseTarget].x;
-        targetP.y = playerPosition[rouseTarget].y;
-        BotStatus = status::initial;
-    }
-    else
-    {
-        rouseTarget = -1;
-        BotStatus = status::idle;
-    }
-}
-// 躲避tricker相关
-Point findNearestPoint(IStudentAPI& api, int n)
-{
-    bool flag = false; // 记录是否找到
-    int x = api.GetSelfInfo()->x / 1000;
-    int y = api.GetSelfInfo()->y / 1000;
-    int trickerx = 0;
-    int trickery = 0;
-    if (isTrickerInsight(api) == 1)
-    {
-        std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-        trickerx = tricker_vector.front()->x / 1000;
-        trickery = tricker_vector.front()->y / 1000;
-    }
-    std::cout << "trickerx:" << trickerx << "trickery:" << trickery << std::endl;
-    Point nearestPoint;
-    double mindis = 999999;
-    for (int i = 0; i < 50; i++)
-    {
-        for (int j = 0; j < 50; j++)
-        {
-            if ((int)api.GetPlaceType(i, j) == n)
-            {
-                if (Distance(Point(i, j), Point(x, y)) < mindis)
-                {
-                    mindis = Distance(Point(i, j), Point(x, y));
-                    nearestPoint = Point(i, j);
-                }
-            }
-        }
-    }
-    return nearestPoint;
-}
-
-// 躲避tricker相关
-double tricker_distance(IStudentAPI& api)
-{
-    std::cout << "Getting tricker distance..." << std::endl;
-
-    double distance = Constants::basicStudentAlertnessRadius;
-    // dangerAlert
-    double danger = api.GetSelfInfo()->dangerAlert;
-    if (danger > 0)
-        distance /= danger;
-    // 可视
-    std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-    if (tricker_vector.size() > 0)
-    {
-        for (int i = 0; i < tricker_vector.size(); i++)
-        {
-            double temp_distance = sqrt(pow(tricker_vector[i]->x - api.GetSelfInfo()->x, 2) +
-                pow(tricker_vector[i]->y - api.GetSelfInfo()->y, 2));
-            distance = std::min(distance, temp_distance);
-        }
-    }
-    return distance / 1000;
-}
-bool isTrickerInsight(IStudentAPI& api)
-{
-    std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-    if (tricker_vector.size() > 0)
-    {
-        return true;
-    }
-    else
-        return false;
-}
-bool isStudentInsight(IStudentAPI& api)
-{
-    std::vector<std::shared_ptr<const THUAI6::Student>> student_vector = api.GetStudents();
-    if (student_vector.size() > 0)
-    {
-        return true;
-    }
-    else
-        return false;
-}
-std::string arrayToString(bool a[], int size)
-{
-    std::string result;
-    for (int i = 0; i < size; i++)
-    {
-        result += a[i];
-    }
-    return result;
-}
-void stringToArray(const std::string& str, bool a[], int size)
-{
-    for (int i = 0; i < size; i++)
-    {
-        a[i] = str[i];
-    }
-}
-std::string arrayToString(int a[], int size)
-{
-    std::string result;
-    for (int i = 0; i < size; i++)
-    {
-        result += a[i];
-    }
-    return result;
-}
-void stringToArray(const std::string& str, int a[], int size)
-{
-    for (int i = 0; i < size; i++)
-    {
-        a[i] = str[i];
-    }
-}
-std::string intToString(int a)
-{
-    std::string result;
-    result += a;
-    return result;
-}
-void stringToInt(const std::string& str, int& a)
-{
-    a = str[0];
-}
-bool isWindowInPath(IStudentAPI& api, std::queue<Point> p)
+bool isWindowInPath(ITrickerAPI& api, std::queue<Point> p)
 {
     std::queue<Point> q = p;
     while (!q.empty())
@@ -858,7 +634,7 @@ bool isWindowInPath(IStudentAPI& api, std::queue<Point> p)
     }
     return false;
 }
-bool isSurroundWindow(IStudentAPI& api)
+bool isSurroundWindow(ITrickerAPI& api)
 {
     auto self = api.GetSelfInfo();
     int x = self->x / 1000;
@@ -876,464 +652,32 @@ bool isSurroundWindow(IStudentAPI& api)
     }
     return false;
 }
-void receiveMessage(IStudentAPI& api)
-{
-    while (api.HaveMessage())
-    {
-        std::cout << "receiving message!" << std::endl;
-        auto receive = api.GetMessage();
-        int buffer[99];
-        int tempID;
-        stringToArray(receive.second, buffer, 34);
-        tempID = buffer[0];
-        int* tempMessage = buffer + 1;
-        std::cout << "check" << std::endl;
-        for (int m = 0; m < 10; m++)
-        {
-            hwIsFinished[m] += tempMessage[m];
-        }
-        for (int m = 0; m < 4; m++)
-        {
-            if (m == tempID)
-                playerDecision[m] = tempMessage[m + 10];
-        }
-        for (int m = 0; m < 4; m++)
-        {
-            if (m == tempID)
-                playerState[m] = tempMessage[m + 14];
-        }
-        for (int m = 0; m < 4; m++)
-        {
-            if (m == tempID)
-                playerPosition[m].x = tempMessage[m + 18];
-        }
-        for (int m = 0; m < 4; m++)
-        {
-            if (m == tempID)
-                playerPosition[m].y = tempMessage[m + 22];
-        }
-        int trickerflag = tempMessage[26];
-        if (trickerflag == 1)
-        {
-            trickerPosition.x = tempMessage[27];
-            trickerPosition.y = tempMessage[28];
-        }
-        for (int m = 0; m < 4; m++)
-        {
-            if (m == tempID)
-                playerHP[m] = tempMessage[m + 29];
-        }
-        std::cout << "message received!" << std::endl;
-        for (int m = 0; m < 33; m++)
-        {
-            std::cout << tempMessage[m] << "||";
-        }
-        std::cout << std::endl;
-    }
-}
 //爬完窗后不会重复爬
-bool isDelayedAfterWindow(IStudentAPI& api)
+bool isDelayedAfterWindow(ITrickerAPI& api)
 {
     if ((int)api.GetSelfInfo()->playerState == 15)
     {
-        climbingCheck = true;
+		climbingCheck = true;
         climbingFrameCount = 0;
-    }
+	}
     climbingFrameCount++;
-    if (climbingFrameCount > 20)
+    if (climbingFrameCount > 15)
     {
         climbingCheck = false;
     }
     return !climbingCheck;
 }
-
-// 从vector中随机输出一个元素
-Point random_element(std::vector<Point>& vec)
+void botInit(ITrickerAPI& api)      //状态机的初始化
 {
-    srand(time(NULL));
-    int index = rand() % vec.size();
-    return vec[index];
-}
-bool isWalled(IStudentAPI& api, Point avoidPoint)
-{
-    int x = api.GetSelfInfo()->x / 1000;
-    int y = api.GetSelfInfo()->y / 1000;
-    int windowFlag = 0;
-    std::queue tempPath = bfs(Point(x, y), avoidPoint);
-    while (!tempPath.empty())
-    {
-        if ((int)api.GetPlaceType(tempPath.front().x, tempPath.front().y) == 7)
-        {
-            windowFlag = 1;
-        }
-        tempPath.pop();
-    }
-    if (windowFlag == 1)
-    {
-        return true;
-    }
-    else
-        return false;
-}
-Point generateAvoidTarget(IStudentAPI& api)
-{
-    Point point = Point(2, 3);
-    std::cout << "generating" << std::endl;
-    int x = (api.GetSelfInfo()->x) / 1000;
-    int y = (api.GetSelfInfo()->y) / 1000;
-    std::vector<Point> vec1;
-    std::vector<Point> vec2;
-    std::vector<Point> vec3;
-    for (int i = 0; i < 50; i++)
-    {
-        for (int j = 0; j < 50; j++)
-        {
-            if (a[i][j] == 0)
-            {
-                if (Distance(Point(i, j), Point(x, y)) < 5 && Distance(Point(i, j), Point(x, y)) > 3)
-                {
-                    if (angle((x - tricker_x), (y - tricker_y), i - x, j - y) * 180 / PI < 60)
-                    {
-                        std::cout << "Reachable points:";
-                        std::cout << "(" << i << "," << j << ")" << std::endl;
-                        vec1.push_back(Point(i, j));
-                    }
-                    if (angle((x - tricker_x), (y - tricker_y), i - x, j - y) * 180 / PI < 120)
-                    {
-                        std::cout << "Less Reachable points:";
-                        std::cout << "(" << i << "," << j << ")" << std::endl;
-                        vec2.push_back(Point(i, j));
-                    }
-                }
-            }
-        }
-    }
-    if (!vec1.empty())
-    {
-        std::cout << "vec1 empty!" << std::endl;
-        for (int i = 0; i < vec1.size(); i++)
-        {
-            if ((int)api.GetPlaceType(vec1[i].x, vec1[i].y) == 7)
-            {
-                return Point(vec1[i].x, vec1[i].y);
-                isCrossingWindow = 1;
-            }
-        }
-        point = random_element(vec1);
-        return point;
-    }
-    else if (vec2.empty())
-    {
-        for (int i = 0; i < vec2.size(); i++)
-        {
-            if ((int)api.GetPlaceType(vec2[i].x, vec2[i].y) == 7)
-            {
-                return Point(vec2[i].x, vec2[i].y);
-                isCrossingWindow = 1;
-            }
-        }
-        point = random_element(vec2);
-        return point;
-    }
-    else
-    {
-        for (int i = 0; i < 50; i++)
-        {
-            for (int j = 0; j < 50; j++)
-            {
-                if (a[i][j] == 0 && (int)api.GetPlaceType(i, j) != 7)
-                {
-                    if (Distance(Point(i, j), Point(x, y)) < 5 && Distance(Point(i, j), Point(x, y)) > 3)
-                    {
-                        if (angle((x - tricker_x), (y - tricker_y), i - x, j - y) * 180 / PI < 170)
-                        {
-                            std::cout << "In a corner!:";
-                            std::cout << "(" << i << "," << j << ")" << std::endl;
-                            vec3.push_back(Point(i, j));
-                        }
-                    }
-                }
-            }
-        }
-        for (int i = 0; i < vec3.size(); i++)
-        {
-            if ((int)api.GetPlaceType(vec3[i].x, vec3[i].y) == 7)
-            {
-                return Point(vec3[i].x, vec3[i].y);
-                isCrossingWindow = 1;
-            }
-        }
-        point = random_element(vec3);
-        return point;
-    }
-}
-void gotoTricker(IStudentAPI& api)
-{
-    targetP = trickerPosition;
-    BotStatus = status::initial;
-}
-void gotoFarestStudent(IStudentAPI& api)
-{
-    int selfID = api.GetSelfInfo()->playerID;
-    playerPosition[selfID].x = api.GetSelfInfo()->x;
-    playerPosition[selfID].y = api.GetSelfInfo()->y;
-    double studentDistance[3];
-    int k = 0;
-    int k_list[3];
-    for (int i = 0; i < 4; i++)
-    {
-        if (i != selfID)
-        {
-            k_list[k] = i;
-            studentDistance[k++] = Distance(playerPosition[selfID], playerPosition[i]);
-        }
-    }
-    int number = findMaxInArray(studentDistance, 3);
-    targetP = playerPosition[k_list[number]];
-    decision = 0;
-    BotStatus = status::initial;
-}
-void gotoNearestStudent(IStudentAPI& api)
-{
-    int selfID = api.GetSelfInfo()->playerID;
-    playerPosition[selfID].x = api.GetSelfInfo()->x;
-    playerPosition[selfID].y = api.GetSelfInfo()->y;
-    double studentDistance[3];
-    int k = 0;
-    int k_list[3];
-    for (int i = 0; i < 4; i++)
-    {
-        if (i != selfID)
-        {
-            k_list[k] = i;
-            studentDistance[k++] = Distance(playerPosition[selfID], playerPosition[i]);
-        }
-    }
-    int number = findMinInArray(studentDistance, 3);
-    targetP = playerPosition[k_list[number]];
-    decision = 0;
-    BotStatus = status::initial;
-}
-int findMaxInArray(double a[], int size)
-{
-    double temp_max = 0;
-    int index = 0;
-    for (int i = 0; i < size; i++)
-    {
-        if (a[i] > temp_max)
-        {
-            temp_max = a[i];
-            index = i;
-        }
-    }
-    return index;
-}
-int findMinInArray(double a[], int size)
-{
-    double temp_min = MAXN;
-    int index = 0;
-    for (int i = 0; i < size; i++)
-    {
-        if (a[i] < temp_min)
-        {
-            temp_min = a[i];
-            index = i;
-        }
-    }
-    return index;
-}
-Point generateFarMovePoint(IStudentAPI& api)
-{
-    Point point = Point(2, 3);
-    std::cout << "generating" << std::endl;
-    int x = (api.GetSelfInfo()->x) / 1000;
-    int y = (api.GetSelfInfo()->y) / 1000;
-    std::vector<Point> vec1;
-    std::vector<Point> vec2;
-    for (int i = 0; i < 50; i++)
-    {
-        for (int j = 0; j < 50; j++)
-        {
-            if (a[i][j] == 0)
-            {
-                if (Distance(Point(i, j), Point(x, y)) < 10 && Distance(Point(i, j), Point(x, y)) > 7)
-                {
-                    if (angle((x - tricker_x), (y - tricker_y), i - x, j - y) * 180 / PI < 91 && angle((x - tricker_x), (y - tricker_y), i - x, j - y) * 180 / PI > 60)
-                    {
-                        if (isWalled(api, Point(i, j)) == 0)
-                        {
-                            std::cout << "Reachable points:";
-                            std::cout << "(" << i << "," << j << ")" << std::endl;
-                            vec1.push_back(Point(i, j));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (!vec1.empty())
-    {
-        std::cout << "vec1 empty!" << std::endl;
-        point = random_element(vec1);
-        return point;
-    }
-    if (vec1.empty())
-    {
-        for (int i = 0; i < 50; i++)
-        {
-            for (int j = 0; j < 50; j++)
-            {
-                if (a[i][j] == 0)
-                {
-                    if (Distance(Point(i, j), Point(x, y)) < 6 && Distance(Point(i, j), Point(x, y)) > 3)
-                    {
-                        if (angle((x - tricker_x), (y - tricker_y), i - x, j - y) * 180 / PI < 60 && angle((x - tricker_x), (y - tricker_y), i - x, j - y) * 180 / PI > 20)
-                        {
-                            if (isWalled(api, Point(i, j)) == 0)
-                            {
-                                std::cout << "Reachable points:";
-                                std::cout << "(" << i << "," << j << ")" << std::endl;
-                                vec2.push_back(Point(i, j));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        if (!vec2.empty())
-        {
-            std::cout << "vec1 empty!" << std::endl;
-            point = random_element(vec2);
-            return point;
-        }
-        else
-        {
-            return Point(1, 1);
-        }
-    }
-}
-void useskill(IStudentAPI& api)
-{
-    for (int i = 0; i < hw.size(); i++)
-    {
-        int x = hw[i].x;
-        int y = hw[i].y;
-        double distance;
-        auto self = api.GetSelfInfo();
-        auto sx = (self->x) / 1000;
-        auto sy = (self->y) / 1000;
-        distance = sqrt((sx - x) * (sx - x) + (sy - y) * (sy - y));
-        if (distance <= 1)
-        {
-            api.UseSkill(0);
-            api.UseSkill(1);
-            api.UseSkill(2);
-        }
-    }
-}
-
-void blankReset()
-{
-    for (int i = 0; i < MAXN; i++)
-    {
-        for (int j = 0; j < MAXN; j++)
-        {
-            blank[i][j] = 0;
-        }
-    }
-}
-void sendMyMessage(IStudentAPI& api)
-{
+    std::ios::sync_with_stdio(false);
     auto self = api.GetSelfInfo();
-    std::cout << isTrickerInsight(api) << std::endl;
-    playerDecision[self->playerID] = decision;
-    playerState[self->playerID] = (int)self->playerState;
+    if (!hasInitMap)
+    {
+        InitMapForMove(api);
+        hasInitMap = true;
+    }
+    blankReset();
 
-    int k = 0;
-    if (api.GetSelfInfo()->studentType == THUAI6::StudentType::Teacher)
-    {
-        k = 100;
-    }
-    else if (api.GetSelfInfo()->studentType == THUAI6::StudentType::StraightAStudent)
-    {
-        k = 13;
-    }
-
-    if (api.GetSelfInfo()->addiction > (60000 * k / 10 - 1000))
-    {
-        playerState[self->playerID] = 4;
-    }
-    playerPosition[self->playerID].x = self->x / 1000;
-    playerPosition[self->playerID].y = self->y / 1000;
-    //print info
-
-    std::cout << "isHwFinished: ";
-    for (int i = 0; i < 10; i++)
-    {
-        std::cout << hwIsFinished[i] << "||";
-    }
-    std::cout << std::endl;
-    std::cout << "playerDecision: ";
-    for (int i = 0; i < 4; i++)
-    {
-        std::cout << playerDecision[i] << "||";
-    }
-    std::cout << std::endl;
-    std::cout << "playerState: ";
-    for (int i = 0; i < 4; i++)
-    {
-        std::cout << playerState[i] << "||";
-    }
-    std::cout << std::endl;
-    std::cout << "playerPosition: ";
-    for (int i = 0; i < 4; i++)
-    {
-        //print playerPosition
-        std::cout << "(" << playerPosition[i].x << "," << playerPosition[i].y << ")" << "||";
-    }
-    std::cout << std::endl;
-
-    if (isSendMessage == 1)
-    {
-        std::string tempstring;
-        tempstring += api.GetSelfInfo()->playerID;
-        tempstring += arrayToString(hwIsFinished, 10);
-        tempstring += arrayToString(playerDecision, 4);
-        tempstring += arrayToString(playerState, 4);
-        for (int i = 0; i < 4; i++)
-        {
-            tempstring += playerPosition[i].x;
-        }
-        for (int i = 0; i < 4; i++)
-        {
-            tempstring += playerPosition[i].y;
-        }
-        tempstring += isTrickerInsight(api);
-        auto trks = api.GetTrickers();
-        if (trks.size()>0)
-        {
-            trickerPosition.x = trks[0]->x / 1000;
-            trickerPosition.y = trks[0]->y / 1000;
-        }
-        tempstring += trickerPosition.x;
-        tempstring += trickerPosition.y;
-        for (int i = 0; i < 4; i++)
-        {
-            tempstring += playerHP[i];
-        }
-        for (int k = 0; k < 4; k++)
-        {
-            if (k != api.GetSelfInfo()->playerID)
-            {
-                api.SendTextMessage(k, tempstring);
-                std::cout << "sending message!" << std::endl;
-            }
-        }
-        isSendMessage = 0;
-    }
-}
-void isDoorClosed(IStudentAPI& api)
-{
     int doorFlag = 0;
     for (int itr = 0; itr < door.size(); itr++)
     {
@@ -1350,391 +694,38 @@ void isDoorClosed(IStudentAPI& api)
     {
         InitMapForMove(api);
     }
-}
-void botInit(IStudentAPI& api)      //状态机的初始化
-{
-    bool stuck = false;
-    std::ios::sync_with_stdio(false);
-    auto self = api.GetSelfInfo();
-    blankReset();
+
     auto stus = api.GetStudents();
+    int stuNum = 0;
     for (int i = 0; i < stus.size(); i++)
     {
-        if (stus[i]->playerID == self->playerID)
-        {
-			continue;
-		}
         blank[stus[i]->x / 1000][stus[i]->y / 1000] = 1;
-        if (stus[i]->x / 100 == self->x / 100 && stus[i]->y / 100 == self->y / 100)
+        if ((int)stus[i]->playerState != 3)
         {
-			stuck = true;
-		}
-    }
-    auto trs = api.GetTrickers();
-    for (int i = 0; i < trs.size(); i++)
-    {
-        blank[trs[i]->x / 1000][trs[i]->y / 1000] = 1;
-        if (trs[i]->x / 100 == self->x / 100 && trs[i]->y / 100 == self->y / 100)
-        {
-            stuck = true;
+            stuNum++;
         }
     }
-    int x = (api.GetSelfInfo()->x) / 1000;
-    int y = (api.GetSelfInfo()->y) / 1000;
-    blank[x][y] = 0;
-    if (isTrickerInsight(api) == 1)
+    blank[self->x/1000][self->y/1000] = 0;
+    std::cout << "decision:" << decision << "stu:" << stuNum << std::endl;
+    if (decision == 1)
     {
-        std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-        tricker_x = tricker_vector.front()->x / 1000;
-        tricker_y = tricker_vector.front()->y / 1000;
+        chasingFrameCount++;
     }
-    framecount++;
-    if (framecount > 10)
+    if ((stuNum != 0 && decision != 1) || (decision == 1 && chasingFrameCount > 10 && stuNum != 0))
     {
-        trickerPosition.x = 0;
-        trickerPosition.y = 0;
-        receiveMessage(api);
-        isSendMessage = 1;
-        framecount = 0;
-    }
-    if (!hasInitMap)
-    {
-        InitMapForMove(api);
-        hasInitMap = true;
-        //initHwGroup();
-    }
-
-    sendMyMessage(api);
-    isDoorClosed(api);
-
-    if (stuck)
-    {
-        BotStatus = status::retreat;
-        return;
-    }
-    if (isTrickerInsight(api) == 1 && isReinitial == 0)
-    {
-        std::cout << "distance:" << tricker_distance(api) << std::endl;
-        /*
-        if (tricker_distance(api) <= 2)
-        {
-            targetP = findNearestPoint(api, 7);
-            std::cout << "goto window" << std::endl;
-        }
-        else
-        {
-            targetP = findNearestPoint(api, 3);
-            std::cout << "goto grass" << std::endl;
-        }
-        */
-        Point temp;
-        targetP = generateAvoidTarget(api);
-        isReinitial = 1;
-        isReinitialForFarMove = 0;
-        formerAvoidState = 0;
-        BotStatus = status::initial;
-    }
-    if (isTrickerInsight(api) == 1 && isReinitial == 1)
-    {
-        std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-        int trickerx = tricker_vector.front()->x / 1000;
-        int trickery = tricker_vector.front()->y / 1000;
-        if (isSurround(api, targetP.x + 0.5, targetP.y + 0.5) == 1)
-            isReinitial = 0;
-        if (angle((targetP.x - x), (targetP.y - y), trickerx - x, trickery - y) * 180 / PI < 45)
-            isReinitial = 0;
-    }
-    else if (isTrickerInsight(api) != 1 && formerAvoidState == 1)
-    {
-        isReinitial = 0;
-        std::cout << "need to move further!" << std::endl;
-        targetP = generateFarMovePoint(api);
-        BotStatus = status::initial;
-        formerAvoidState = 0;
-    }
-    else if (formerAvoidState == 0)
-    {
-        isReinitial = 0;
-        for (int i = 0; i < 4; i++)
-        {
-            if (playerState[i] == 3)
-            {
-                decision = 4;
-                rouseTarget = i;
-                if (rouseTarget == -1)
-                    BotStatus = status::idle;
-                return;
-            }
-        }
-        if (rouseTarget != -1)
-        {
-            rouseTarget = -1;
-            BotStatus = status::idle;
-        }
-        if (!isGraduate)
-        {
-            decision = 1;
-        }
-        else if (isGraduate)
-        {
-            decision = 2;
-        }
-    }
-    formerAvoidState = isTrickerInsight(api);
-    formerState = (int)api.GetSelfInfo()->playerState;
-}
-void teacherBotInit(IStudentAPI& api)      //状态机的初始化
-{
-    bool stuck = false;
-    std::cout << "decision:" << decision << std::endl;
-    std::ios::sync_with_stdio(false);
-    auto self = api.GetSelfInfo();
-    blankReset();
-    auto stus = api.GetStudents();
-    for (int i = 0; i < stus.size(); i++)
-    {
-        if (stus[i]->playerID == self->playerID)
-        {
-            continue;
-        }
-        blank[stus[i]->x / 1000][stus[i]->y / 1000] = 1;
-        if (stus[i]->x /100== self->x / 100&& stus[i]->y / 100 == self->y / 100)
-        {
-            stuck = true;
-        }
-    }
-    auto trs = api.GetTrickers();
-    for (int i = 0; i < trs.size(); i++)
-    {
-        blank[trs[i]->x / 1000][trs[i]->y / 1000] = 1;
-        if (trs[i]->x / 100 == self->x / 100 && trs[i]->y / 100 == self->y / 100)
-        {
-            stuck = true;
-        }
-    }
-    int x = (api.GetSelfInfo()->x) / 1000;
-    int y = (api.GetSelfInfo()->y) / 1000;
-    blank[x][y] = 0;
-
-    framecount++;
-    if (framecount > 10)
-    {
-        trickerPosition.x = 0;
-        trickerPosition.y = 0;
-        receiveMessage(api);
-        isSendMessage = 1;
-        framecount = 0;
-    }
-    if (!hasInitMap)
-    {
-        InitMapForMove(api);
-        hasInitMap = true;
-        //initHwGroup();
-    }
-
-    sendMyMessage(api);
-    isDoorClosed(api);
-
-
-    if (stuck)
-    {
-		BotStatus = status::retreat;
-		return;
-	}
-
-    for (int i = 0; i < 4; i++)
-    {
-        if (playerState[i] == 3)
-        {
-            if (decision != 4)
-                BotStatus = status::idle;
-            decision = 4;
-            rouseTarget = i;
-
-            return;
-        }
-    }
-    if(decision == 4)
+        chasingFrameCount = 0;
         decision = 1;
-    if (rouseTarget != -1)
-    {
-        rouseTarget = -1;
         BotStatus = status::idle;
     }
-    if (self->timeUntilSkillAvailable[0] > 0)
+    else if (stuNum == 0 && (BotStatus != status::move && BotStatus != status::retreat))
     {
-        if (isTrickerInsight(api) == 1 && isReinitial == 0)
-        {
-            std::cout << "distance:" << tricker_distance(api) << std::endl;
-            /*
-            if (tricker_distance(api) <= 2)
-            {
-                targetP = findNearestPoint(api, 7);
-                std::cout << "goto window" << std::endl;
-            }
-            else
-            {
-                targetP = findNearestPoint(api, 3);
-                std::cout << "goto grass" << std::endl;
-            }
-            */
-            Point temp;
-            targetP = generateAvoidTarget(api);
-            isReinitial = 1;
-            isReinitialForFarMove = 0;
-            formerAvoidState = 0;
-            BotStatus = status::initial;
-        }
-        if (isTrickerInsight(api) == 1 && isReinitial == 1)
-        {
-            std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-            int trickerx = tricker_vector.front()->x / 1000;
-            int trickery = tricker_vector.front()->y / 1000;
-            if (isSurround(api, targetP.x + 0.5, targetP.y + 0.5) == 1)
-                isReinitial = 0;
-            if (angle((targetP.x - x), (targetP.y - y), trickerx - x, trickery - y) * 180 / PI < 45)
-                isReinitial = 0;
-        }
-        else if (isTrickerInsight(api) != 1 && formerAvoidState == 1)
-        {
-            isReinitial = 0;
-            std::cout << "need to move further!" << std::endl;
-            targetP = generateFarMovePoint(api);
-            BotStatus = status::initial;
-            formerAvoidState = 0;
-        }
-        else if (formerAvoidState == 0)
-        {
-            isReinitial = 0;
-            if (trickerPosition.x != 0 && trickerPosition.y != 0 && decision != 5)
-            {
-                decision = 5;
-                BotStatus = status::idle;
-                return;
-            }
-            else if (trickerPosition.x == 0 && trickerPosition.y == 0)
-            {
-                if (!isGraduate)
-                {
-                    decision = 1;
-                }
-                else if (isGraduate)
-                {
-                    decision = 2;
-                }
-            }
-        }
+        decision = 2;
     }
-    else 
-    {
-        if (isTrickerInsight(api) == 1)
-        {
-            bool skillFlag = false;
-            std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-            if (tricker_vector.size() > 0 && api.GetSelfInfo()->timeUntilSkillAvailable[0] == 0)
-            {
-                if (tricker_vector.front()->playerState == THUAI6::PlayerState::Climbing || tricker_vector.front()->playerState == THUAI6::PlayerState::Swinging || tricker_vector.front()->playerState == THUAI6::PlayerState::OpeningAGate)
-                    skillFlag = true;
-                if (skillFlag && Distance(Point(self->x / 1000, self->y / 1000), Point(tricker_vector[0]->x / 1000, tricker_vector[0]->y / 1000)) < (double)self->viewRange / 3)
-                    api.UseSkill(0);
-            }
-            if (isReinitial == 0)
-            {
-                decision = 3;
-                std::cout << "distance:" << tricker_distance(api) << std::endl;
-                Point temp;
-                targetP = generateAvoidTarget(api);
-                isReinitial = 1;
-                BotStatus = status::initial;
-                return;
-            }
-            if (isReinitial == 1)
-            {
-                std::vector<std::shared_ptr<const THUAI6::Tricker>> tricker_vector = api.GetTrickers();
-                trickerPosition.x = tricker_vector.front()->x / 1000;
-                trickerPosition.y = tricker_vector.front()->y / 1000;
-                if (isSurround(api, targetP.x + 0.5, targetP.y + 0.5) == 1)
-                    isReinitial = 0;
-                if (angle((targetP.x - x), (targetP.y - y), trickerPosition.x - x, trickerPosition.y - y) * 180 / PI < 45)
-                    isReinitial = 0;
-            }
-        }
-        else
-        {
-            isReinitial = 0; // 重置躲避状态 
-            if (trickerPosition.x != 0 && trickerPosition.y != 0 && decision != 5)
-            {
-                decision = 5;
-                BotStatus = status::idle;
-                return;
-            }
-            else if (trickerPosition.x == 0 && trickerPosition.y == 0)
-            {
-                if (!isGraduate)
-                {
-                    decision = 1;
-                }
-                else if (isGraduate)
-                {
-                    decision = 2;
-                }
-            }
-        }
-    }
-    formerAvoidState = isTrickerInsight(api);
-    formerState = (int)api.GetSelfInfo()->playerState;
 }
-// ——————————————状态机函数—————————————————————————————
-void playerBot(IStudentAPI& api)
-{
-    if ((int)api.GetSelfInfo()->playerState == 4)
-    {
-        return;
-    }
-    std::cout << "Target:" << "(" << targetP.x << "," << targetP.y << ")" << std::endl;
-    botInit(api);
-    std::cout << "decision:" << decision << std::endl;
-    std::cout << "isSurroundWindow:    " << isSurroundWindow(api) << std::endl;
-    useskill(api);
-    switch (BotStatus)
-    {
-        // 有限状态机的core
-    case status::initial:
-    {
-        initialStatus(api);
-        break;
-    }
-    case status::move:
-    {
-        moveStatus(api);
-        // printPosition(api);
-        // printQueue(path);
-        // printPathType(api, path);
-        break;
-    }
-    case status::retreat:
-    {
-        retreatStatus(api);
-        break;
-    }
-    case status::idle:
-    {
-        idleStatus(api);
-        break;
-    }
-    }
-    api.Wait();
-}
-void teacherBot(IStudentAPI& api)
-{
-    if ((int)api.GetSelfInfo()->playerState == 4)
-    {
-        return;
-    }
 
-    std::cout << "Target:" << "(" << targetP.x << "," << targetP.y << ")" << std::endl;
-    teacherBotInit(api);
-    std::cout << "decision:" << decision << std::endl;
+void playerBot(ITrickerAPI& api)
+{
+    botInit(api);
     std::cout << "isSurroundWindow:    " << isSurroundWindow(api) << std::endl;
     switch (BotStatus)
     {
@@ -1765,9 +756,14 @@ void teacherBot(IStudentAPI& api)
     }
     api.Wait();
 }
-void moveStatus(IStudentAPI& api)
+//=============================================
+
+// ——————————————状态机函数—————————————————————————————
+
+
+void moveStatus(ITrickerAPI& api)
 {
-    if (path.empty())
+        if (path.empty())
     {
         BotStatus = status::idle;
         return;
@@ -1777,14 +773,14 @@ void moveStatus(IStudentAPI& api)
     std::cout << "isSurroundWindow:" << isSurroundWindow(api) << std::endl;
     if (isCrossingWindow == 1)
     {
-        if (isDelayedAfterWindow(api) == 1 && isSurroundWindow(api) == 1)
+        if (isDelayedAfterWindow(api) == 1 && isSurroundWindow(api) == 1 )
         {
             std::cout << "my skipping window!" << std::endl;
             api.SkipWindow();
             api.SkipWindow();
         }
     }
-    if (isSurround(api, path.front().x + 0.5, path.front().y + 0.5) && (!path.empty()))
+    if (isSurround(api, path.front().x + 0.5, path.front().y + 0.5) && !path.empty())
         path.pop();
 
     if ((int)api.GetPlaceType(targetP.x, targetP.y) == 4)
@@ -1793,6 +789,7 @@ void moveStatus(IStudentAPI& api)
         {
             // std::cout << path.front().x << path.front().y << std::endl;
             Goto(api, path.front().x + 0.5, path.front().y + 0.5);
+           
         }
         else
         {
@@ -1811,11 +808,14 @@ void moveStatus(IStudentAPI& api)
             BotStatus = status::idle;
         }
     }
-    if (stuckCheck(api, 3))
+
+    if (stuckCheck(api, 8))
     {
 
-        BotStatus = status::retreat;
-        stuckCheckStartTime = std::chrono::system_clock::now();
+            BotStatus = status::retreat;
+            stuckCheckStartTime = std::chrono::system_clock::now();
+        
+        
     }
     /*
     if (isTrickerInsight(api) == 1)
@@ -1825,7 +825,7 @@ void moveStatus(IStudentAPI& api)
     }
     */
 }
-void retreatStatus(IStudentAPI& api)
+void retreatStatus(ITrickerAPI& api)
 {
     std::cout << "retreat" << std::endl;
     if (isCrossingWindow == 1)
@@ -1839,10 +839,10 @@ void retreatStatus(IStudentAPI& api)
     double randAngle = 1;
     auto currentTime = std::chrono::system_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - stuckCheckStartTime);
-    if (diff.count() > 500)
+    if (diff.count() > 200)
     {
         std::cout << "deep rand!!" << std::endl;
-        randAngle = 2;
+        randAngle = 3;
         BotStatus = status::initial;
     }
     if (!path.empty() && !isTrigger(api, targetP))
@@ -1862,14 +862,19 @@ void retreatStatus(IStudentAPI& api)
     }
 }
 
-void initialStatus(IStudentAPI& api)
+
+void initialStatus(ITrickerAPI& api)
 {
     std::cout << "initial" << std::endl;
 
     int x = (api.GetSelfInfo()->x) / 1000;
     int y = (api.GetSelfInfo()->y) / 1000;
     path = bfs(Point(targetP.x, targetP.y), Point(x, y));
-
+    if (path.empty())
+    {
+        BotStatus = status::idle;
+        return;
+    }
     if (isWindowInPath(api, path))
     {
         isCrossingWindow = 1;
@@ -1881,7 +886,7 @@ void initialStatus(IStudentAPI& api)
     BotStatus = status::move;
     printQueue(path);
 }
-void idleStatus(IStudentAPI& api)
+void idleStatus(ITrickerAPI& api)
 {
     std::cout << "idling!" << std::endl;
 
@@ -1889,28 +894,20 @@ void idleStatus(IStudentAPI& api)
     {
     case 1:
     {
-        closestJuan(api);
+        antiJuan(api);
         break;
     }
     case 2:
     {
-        std::cout << "graduate!!" << std::endl;
-        graduate(api);
+        walkingAround(api);
         break;
     }
     case 3:
     {
-        decision = 0;
         break;
     }
     case 4:
     {
-        rouse(api);
-        break;
-    }
-    case 5:
-    {
-        gotoTricker(api);
         break;
     }
     default:

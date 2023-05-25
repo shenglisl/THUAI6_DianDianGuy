@@ -83,7 +83,7 @@ void searchingArrayClear();
 int pathLen(Point, Point);
 
 // 状态检查类
-bool isSurround(ITrickerAPI&, int, int);
+bool isSurround(ITrickerAPI&, double , double);
 bool stuckCheck(ITrickerAPI&, int); // 注意，n必须在2-10之间
 bool progressStuckCheck(int, int);
 int boolArrayCount(bool[], int);
@@ -208,9 +208,9 @@ void antiJuan(ITrickerAPI& api) {
                 if (true)
                 {
                     api.UseSkill(0);
-                    std::cout << "bengbengzhadan!!!!!"<<std::endl;
+                    std::cout << "bengbengzhadan!!!!!" << std::endl;
                 }
-                api.Attack(atan2(stus[i]->y - api.GetSelfInfo()->y,stus[i]->x - api.GetSelfInfo()->x));
+                api.Attack(atan2(stus[i]->y - api.GetSelfInfo()->y, stus[i]->x - api.GetSelfInfo()->x));
                 BotStatus = status::idle;
                 return;
             }
@@ -499,12 +499,12 @@ void printPointVector(std::vector<Point> v)
     }
     std::cout << std::endl;
 }
-bool isSurround(ITrickerAPI& api, int x, int y)
+bool isSurround(ITrickerAPI& api, double x, double y)
 {
     double distance;
     auto self = api.GetSelfInfo();
-    auto sx = (self->x) / 1000;
-    auto sy = (self->y) / 1000;
+    auto sx = (double)(self->x) / 1000;
+    auto sy = (double)(self->y) / 1000;
     distance = sqrt((sx - x) * (sx - x) + (sy - y) * (sy - y));
     if (distance <= 0.3)
         return true;
@@ -528,11 +528,11 @@ void Goto(ITrickerAPI& api, double destX, double destY, double randAngle = 0)
 
     auto delta_x = (double)(destX * 1000 - sx);
     auto delta_y = (double)(destY * 1000 - sy);
-    std::cout <<"dx" << delta_x <<"dy"<< delta_y << std::endl;
+    std::cout << "dx" << delta_x << "dy" << delta_y << std::endl;
     double ang = 0;
     // 直接走
     ang = atan2(delta_y, delta_x);
-    std::cout<< "angle:" << ang << std::endl;
+    std::cout << "angle:" << ang << std::endl;
     if (delta_x != 0 || delta_y != 0)
         api.Move(300, ang + (std::rand() % 10 - 5) * PI / 10 * randAngle);
 }
@@ -657,9 +657,9 @@ bool isDelayedAfterWindow(ITrickerAPI& api)
 {
     if ((int)api.GetSelfInfo()->playerState == 15)
     {
-		climbingCheck = true;
+        climbingCheck = true;
         climbingFrameCount = 0;
-	}
+    }
     climbingFrameCount++;
     if (climbingFrameCount > 15)
     {
@@ -705,7 +705,7 @@ void botInit(ITrickerAPI& api)      //状态机的初始化
             stuNum++;
         }
     }
-    blank[self->x/1000][self->y/1000] = 0;
+    blank[self->x / 1000][self->y / 1000] = 0;
     std::cout << "decision:" << decision << "stu:" << stuNum << std::endl;
     if (decision == 1)
     {
@@ -763,7 +763,7 @@ void playerBot(ITrickerAPI& api)
 
 void moveStatus(ITrickerAPI& api)
 {
-        if (path.empty())
+    if (path.empty())
     {
         BotStatus = status::idle;
         return;
@@ -773,7 +773,7 @@ void moveStatus(ITrickerAPI& api)
     std::cout << "isSurroundWindow:" << isSurroundWindow(api) << std::endl;
     if (isCrossingWindow == 1)
     {
-        if (isDelayedAfterWindow(api) == 1 && isSurroundWindow(api) == 1 )
+        if (isDelayedAfterWindow(api) == 1 && isSurroundWindow(api) == 1)
         {
             std::cout << "my skipping window!" << std::endl;
             api.SkipWindow();
@@ -789,7 +789,7 @@ void moveStatus(ITrickerAPI& api)
         {
             // std::cout << path.front().x << path.front().y << std::endl;
             Goto(api, path.front().x + 0.5, path.front().y + 0.5);
-           
+
         }
         else
         {
@@ -812,10 +812,10 @@ void moveStatus(ITrickerAPI& api)
     if (stuckCheck(api, 8))
     {
 
-            BotStatus = status::retreat;
-            stuckCheckStartTime = std::chrono::system_clock::now();
-        
-        
+        BotStatus = status::retreat;
+        stuckCheckStartTime = std::chrono::system_clock::now();
+
+
     }
     /*
     if (isTrickerInsight(api) == 1)
@@ -849,7 +849,7 @@ void retreatStatus(ITrickerAPI& api)
     {
         std::cout << path.front().x << path.front().y << std::endl;
         Goto(api, path.front().x, path.front().y, randAngle);
-        if (isSurround(api, path.front().x, path.front().y))
+        if (isSurround(api, path.front().x + 0.5, path.front().y + 0.5))
             path.pop();
     }
     else
